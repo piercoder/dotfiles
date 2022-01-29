@@ -211,5 +211,5 @@ alias gitup='git add . && git commit -m "Update: $(date)" && git push'
 # Startup message
 #----------------------------------------------------------------------#
 echo -e "Hi ${CYAN}${USER}${RESET}! I'm ${YELLOW}$(hostname)${RESET}. It's ${GREEN}$(date)${RESET}"
-echo ""
+echo "prova"
 
