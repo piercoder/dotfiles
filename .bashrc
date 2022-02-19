@@ -172,6 +172,7 @@ myip ()
   echo -e "${RED}Public IP:${YELLOW} ${pIP}${RESET}"
 }
 
+# Backup files
 bak()
 {
   for file in "$@"
