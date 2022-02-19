@@ -73,7 +73,7 @@ fi
 
 # PS1
 if [ "$color_prompt" = yes ]; then
-    PS1="${debian_chroot:+($debian_chroot)}[\[${BLUE}\]\w\[${RESET}\]]\[${RED}\]\$>\[${RESET}\] "
+    PS1="${debian_chroot:+($debian_chroot)}\[${YELLOW}\][\[${RESET}\]\[${BLUE}\]\w\[${RESET}\]\[${YELLOW}\]]\[${RESET}\]\[${GREEN}\]\$\[${RESET}\]\[${RED}\]>\[${RESET}\] "
 else
     PS1='${debian_chroot:+($debian_chroot)}[\w]\$> '
 fi
@@ -201,6 +201,8 @@ if [ -x /usr/bin/dircolors ]; then
 fi
 
 # Other handy aliases
+alias reboot='sudo reboot'
+
 alias ll='ls -alh'
 
 alias aptup='sudo apt update && sudo apt full-upgrade && sudo apt autoremove && flatpak update'
@@ -210,6 +212,6 @@ alias gitup='git add . && git commit -m "Update: $(date)" && git push'
 #----------------------------------------------------------------------#
 # Startup message
 #----------------------------------------------------------------------#
-echo -e "Hi ${CYAN}${USER}${RESET}! I'm ${YELLOW}$(hostname)${RESET}. It's ${GREEN}$(date)${RESET}"
-echo ""
+#echo -e "Hi ${CYAN}${USER}${RESET}! I'm ${YELLOW}$(hostname)${RESET}. It's ${GREEN}$(date)${RESET}"
+#echo ""
 
