@@ -203,6 +203,7 @@ fi
 
 # Other handy aliases
 alias reboot='sudo reboot'
+alias shutdown='sudo shutdown -h now'
 
 alias ll='ls -alh'
 
