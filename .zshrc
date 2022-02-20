@@ -119,6 +119,9 @@ alias gitup='git add . && git commit -m "Update: $(date)" && git push'
 alias brewup='brew update && brew upgrade && brew doctor && brew cleanup'
 
 alias cleanup='sudo periodic daily weekly monthly'
+
+alias reboot='sudo reboot'
+alias shutdown='shutdown -h now'
 #----------------------------------------------------------------------#
 
 
