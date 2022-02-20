@@ -115,6 +115,8 @@ alias stata='open -n /Applications/Stata/StataSE.app'
 alias myip="curl http://ipecho.net/plain; echo"
 
 alias gitup='git add . && git commit -m "Update: $(date)" && git push'
+
+alias brewup='brew update && brew upgrade && brew doctor && brew cleanup'
 #----------------------------------------------------------------------#
 
 
