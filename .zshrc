@@ -139,4 +139,6 @@ alias shutdown='shutdown -h now'
 #----------------------------------------------------------------------#
 autoload -Uz compinit
 compinit
+
+source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 #----------------------------------------------------------------------#
