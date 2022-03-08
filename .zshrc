@@ -1,11 +1,9 @@
 #======================================================================#
-#     mmmmm    "
-#     #   "# mmm     mmm    m mm
-#     #mmm#"   #    #"  #   #"  "
-#     #        #    #""""   #
-#     #      mm#mm  "#mm"   #
-#
-#     My .zshrc file for MacOs
+#	 __     ___  __      __   __   __   ___  __  
+#	|__) | |__  |__)    /  ` /  \ |  \ |__  |__) 
+#	|    | |___ |  \    \__, \__/ |__/ |___ |  \ 
+#                                      
+#	My .zshrc file for MacOs
 #======================================================================#
 
 
@@ -140,5 +138,7 @@ alias shutdown='shutdown -h now'
 autoload -Uz compinit
 compinit
 
+# First you need to install zsh-syntax-highlighting:
+# brew install zsh-syntax-highlighting
 source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 #----------------------------------------------------------------------#
