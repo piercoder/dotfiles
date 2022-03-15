@@ -119,7 +119,7 @@ alias brewup='brew update && brew upgrade && brew doctor && brew cleanup'
 alias cleanup='sudo periodic daily weekly monthly'
 
 alias reboot='sudo reboot'
-alias shutdown='shutdown -h now'
+alias shutdown='sudo shutdown -h now'
 #----------------------------------------------------------------------#
 
 
@@ -127,7 +127,9 @@ alias shutdown='shutdown -h now'
 #----------------------------------------------------------------------#
 # Functions
 #----------------------------------------------------------------------#
-
+function hunt {
+    find / -iname "*$1*" 2>/dev/null
+}
 #----------------------------------------------------------------------#
 
 
