@@ -120,6 +120,10 @@ alias cleanup='sudo periodic daily weekly monthly'
 
 alias reboot='sudo reboot'
 alias shutdown='sudo shutdown -h now'
+
+alias monitorcpumem='sudo htop'
+alias monitornet='sudo jnettop'
+alias monitordisk='sudo ncdu /'
 #----------------------------------------------------------------------#
 
 
