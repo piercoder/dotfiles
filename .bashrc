@@ -1,11 +1,9 @@
 #======================================================================#
-#     mmmmm    "
-#     #   "# mmm     mmm    m mm
-#     #mmm#"   #    #"  #   #"  "
-#     #        #    #""""   #
-#     #      mm#mm  "#mm"   #
+#	 __     ___  __      __   __   __   ___  __
+#	|__) | |__  |__)    /  ` /  \ |  \ |__  |__)
+#	|    | |___ |  \    \__, \__/ |__/ |___ |  \
 #
-#     My .bashrc file
+#	My .bashrc file for Debian
 #======================================================================#
 
 #----------------------------------------------------------------------#
@@ -183,6 +181,12 @@ bak()
   done
 }
 
+# Find file
+function hunt {
+    find / -iname "*$1*" 2>/dev/null
+}
+
+
 #----------------------------------------------------------------------#
 # Aliases
 #----------------------------------------------------------------------#
@@ -212,6 +216,10 @@ alias ll='ls -alh'
 alias aptup='sudo apt update && sudo apt full-upgrade && sudo apt autoremove && flatpak update'
 
 alias gitup='git add . && git commit -m "Update: $(date)" && git push'
+
+alias monitorcpumem='sudo htop'
+alias monitornet='sudo jnettop'
+alias monitordisk='sudo ncdu /'
 
 #----------------------------------------------------------------------#
 # Startup message
