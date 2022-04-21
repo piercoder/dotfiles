@@ -9,12 +9,15 @@
 #----------------------------------------------------------------------#
 # Definitions
 #----------------------------------------------------------------------#
-# Colors
+# Foregraund colors
+BLACK='\033[01;30m'
 RED='\033[01;31m'
-BLUE='\033[01;34m'
 GREEN='\033[01;32m'
 YELLOW='\033[01;33m'
+BLUE='\033[01;34m'
+MAGENTA='\033[01;35m'
 CYAN='\033[01;36m'
+GRAY='\033[01;36m'
 RESET='\033[00m'
 
 # Set variable identifying the chroot you work in (used in the prompt below)
@@ -71,9 +74,9 @@ fi
 
 # PS1
 if [ "$color_prompt" = yes ]; then
-    PS1="${debian_chroot:+($debian_chroot)}\[${YELLOW}\][\[${RESET}\]\[${BLUE}\]\w\[${RESET}\]\[${YELLOW}\]]\[${RESET}\]\[${GREEN}\]\$\[${RESET}\]\[${RED}\]>\[${RESET}\] "
+     PS1="${debian_chroot:+($debian_chroot)}\w\[${RED}\] ▶\[${RESET}\] "
 else
-    PS1='${debian_chroot:+($debian_chroot)}[\w]\$> '
+    PS1='${debian_chroot:+($debian_chroot)}\w ▶ '
 fi
 unset color_prompt force_color_prompt
 
