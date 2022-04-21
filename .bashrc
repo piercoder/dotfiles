@@ -213,7 +213,7 @@ alias shutdown='sudo shutdown -h now'
 
 alias ll='ls -alh'
 
-alias aptup='sudo apt update && sudo apt full-upgrade && sudo apt autoremove && flatpak update'
+alias aptup='sudo apt update && sudo apt full-upgrade && sudo apt autoremove'
 
 alias gitup='git add . && git commit -m "Update: $(date)" && git push'
 
