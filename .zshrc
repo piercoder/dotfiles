@@ -96,7 +96,7 @@ zstyle ':completion::complete:*' gain-privileges 1
 # Default prompt
 #PS1="%n@%m %1~ %# "
 
-PROMPT="%B%F{yellow}[%f%F{cyan}%~%f%F{yellow}]%f%F{red}>%f%b "
+PROMPT="%B%F{yellow}[%f%F{cyan}%~%f%F{yellow}]%f%F{red}▶%f%b "
 RPROMPT="%B%F{yellow}[%f%F{cyan}%*%f%F{yellow}]%f%b"
 #----------------------------------------------------------------------#
 
