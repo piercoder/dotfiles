@@ -1,12 +1,12 @@
 #!/bin/bash
 
 User="$USER@$(hostname)"
-OS="$(lsb_release -sirc)"
+OS="$(cat /etc/os-release | grep PRETTY_NAME | sed 's/PRETTY_NAME=//' | sed 's/"/"/')"
 Desktop="${XDG_CURRENT_DESKTOP}"
 Kernel="$(uname -sr)"
 Uptime="$(uptime -p | sed 's/up //')"
 Pack_dpkg="$(dpkg -l | grep -c ^ii)"
-Pack_flat="$(flatpak list | grep -c system)"
+# Pack_flat="$(flatpak list | grep -c system)"
 CPU="$(lscpu | grep Model\ name | sed 's/Model name://' | sed 's/^[ \t]*//')"
 GPU="$(glxinfo -B | grep Device: | sed 's/Device://' | sed 's/^[ \t]*//')"
 Disk="$(df -h / | awk '/^\// {print $3 "/" $2 " (" $5 ")"}')"
@@ -19,12 +19,12 @@ echo '       ,g$$$$$$$$$$$$$$$P.     OS:' $OS
 echo '     ,g$$P""       """Y$$.".   Desktop:' $Desktop
 echo '    ,$$P"              `$$$."  Kernel:' $Kernel
 echo '   ,$$P       ,ggs.     `$$b:  Uptime:' $Uptime
-echo '  `d$$"     ,$P""   .    $$$   Packages:' $Pack_dpkg \(dpkg\), $Pack_flat \(flatpak\)
+echo '  `d$$"     ,$P""   .    $$$   Packages:' $Pack_dpkg \(dpkg\) #, $Pack_flat \(flatpak\)
 echo '   $$P      d$"     ,    $$P   CPU:' $CPU
 echo '   $$:      $$.   -    ,d$$"   GPU:' $GPU
 echo '   $$\;      Y$b._   _,d$P     Disk (\):' $Disk
 echo '   Y$$.    `.`"Y$$$$P""        RAM:' $RAM
-echo '   `$$b      "-.__             Local IP:'  $lIP
+echo '   `$$b      "-.__             Local IP:' $lIP
 echo '    `Y$$                       ' # Public IP:' $pIP
 echo '     `Y$$.                     '
 echo '       `$$b.                   '
