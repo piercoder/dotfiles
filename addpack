@@ -2,7 +2,7 @@
 # Only office
 #======================================================================#
 # Instructions
-https://helpcenter.onlyoffice.com/installation/desktop-install-ubuntu.aspx?_ga=2.68644241.1008996715.1650900759-1868342274.1650900759
+# https://helpcenter.onlyoffice.com/installation/desktop-install-ubuntu.aspx?_ga=2.68644241.1008996715.1650900759-1868342274.1650900759
 
 # Add GPG key
 sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys CB2DE8E5
