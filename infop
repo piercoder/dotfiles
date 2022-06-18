@@ -1,5 +1,25 @@
 #!/bin/bash
 
+#======================================================================#
+#    __     ___  __      __   __   __   ___  __
+#   |__) | |__  |__)    /  ` /  \ |  \ |__  |__)
+#   |    | |___ |  \    \__, \__/ |__/ |___ |  \
+#
+#   my info script
+#======================================================================#
+
+
+#======================================================================#
+# Colors
+#======================================================================#
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+#======================================================================#
+
+
+#======================================================================#
+# Fetch info
+#======================================================================#
 User="$USER@$(hostname)"
 OS="$(cat /etc/os-release | grep PRETTY_NAME | sed 's/PRETTY_NAME=//' | sed 's/"//g')"
 Desktop="${XDG_CURRENT_DESKTOP}"
@@ -12,22 +32,28 @@ GPU="$(glxinfo -B | grep Device: | sed 's/Device://' | sed 's/^[ \t]*//')"
 Disk="$(df -h / | awk '/^\// {print $3 "/" $2 " (" $5 ")"}')"
 RAM="$(free -h | awk '/^Mem:/ {print $3 "/" $2}')"
 lIP="$(hostname -I | awk '{print $1}')"
-# pIP="$(curl -s http://ipecho.net/plain)"
+#pIP="$(curl -s http://ipecho.net/plain)"
+#======================================================================#
 
-echo '          _,met$$$$$gg.        User:' $User
-echo '       ,g$$$$$$$$$$$$$$$P.     OS:' $OS
-echo '     ,g$$P""       """Y$$.".   Desktop:' $Desktop
-echo '    ,$$P"              `$$$."  Kernel:' $Kernel
-echo '   ,$$P       ,ggs.     `$$b:  Uptime:' $Uptime
-echo '  `d$$"     ,$P""   .    $$$   Packages:' $Pack_dpkg \(dpkg\) #, $Pack_flat \(flatpak\)
-echo '   $$P      d$"     ,    $$P   CPU:' $CPU
-echo '   $$:      $$.   -    ,d$$"   GPU:' $GPU
-echo '   $$\;      Y$b._   _,d$P     Disk (\):' $Disk
-echo '   Y$$.    `.`"Y$$$$P""        RAM:' $RAM
-echo '   `$$b      "-.__             Local IP:' $lIP
-echo '    `Y$$                       ' # Public IP:' $pIP
-echo '     `Y$$.                     '
-echo '       `$$b.                   '
-echo '         `Y$$b.                '
-echo '            `"Y$b._            '
-echo '                `""""          '
+
+#======================================================================#
+# Display info
+#======================================================================#
+echo -e '          _,pier$$$$gg.        ' "${RED}  [User] ${NC}$User"
+echo -e '       ,g$$$$$$$$$$$$$$$P.     ' "${RED}[Uptime] ${NC}$Uptime"
+echo -e '     ,g$$P""       """Y$$.".   '
+echo -e '    ,$$P"              `$$$."  ' "${RED}    [OS] ${NC}$OS"
+echo -e '   ,$$P       ,ggs.     `$$b:  ' "${RED}[Kernel] ${NC}$Kernel"
+echo -e '  `d$$"     ,$P""   .    $$$   ' "${RED}   [Pkg] ${NC}$Pack_dpkg (dpkg)" #, $Pack_flat (flatpak)
+echo -e '   $$P      d$"     ,    $$P   ' "${RED}    [DE] ${NC}$Desktop"
+echo -e '   $$:      $$.   -    ,d$$"   '
+echo -e '   $$\;      Y$b._   _,d$P     ' "${RED}  [Disk] ${NC}$Disk"
+echo -e '   Y$$.    `.`"Y$$$$P""        ' "${RED}   [CPU] ${NC}$CPU"
+echo -e '   `$$b      "-.__             ' "${RED}   [MEM] ${NC}$RAM"
+echo -e '    `Y$$                       ' "${RED}   [GPU] ${NC}$GPU"
+echo -e '     `Y$$.                     ' "${RED}    [IP] ${NC}$lIP" #, $pIP
+echo -e '       `$$b.                   '
+echo -e '         `Y$$b.                '
+echo -e '            `"Y$b._            '
+echo -e '                `""""          '
+#======================================================================#
