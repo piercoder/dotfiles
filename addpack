@@ -11,6 +11,7 @@
 #----------------------------------------------------------------------#
 # Install NIX package manager
 #----------------------------------------------------------------------#
+sudo apt install curl
 curl -L https://nixos.org/nix/install | sh
 mkdir ~/.config/nixpkgs
 echo '{ allowUnfree = true; }' > ~/.config/nixpkgs/config.nix
