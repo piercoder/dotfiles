@@ -1,58 +1,22 @@
-#======================================================================#
-# Only office
-#======================================================================#
-# Instructions
-# https://helpcenter.onlyoffice.com/installation/desktop-install-ubuntu.aspx?_ga=2.68644241.1008996715.1650900759-1868342274.1650900759
-
-# Add GPG key
-sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys CB2DE8E5
-
-# Add repository
-echo 'deb https://download.onlyoffice.com/repo/debian squeeze main' | sudo tee -a /etc/apt/sources.list.d/onlyoffice.list
-
-# Update the package manager cache:
-sudo apt update
-
-# Install
-sudo apt install onlyoffice-desktopeditors
-
-# Run
-desktopeditors
-#======================================================================#
-
+#!/bin/bash
 
 #======================================================================#
-# Teams
-#======================================================================#
-# Add GPG key
-curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
-
-# Add repository
-echo 'deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main' | sudo tee -a /etc/apt/sources.list.d/teams.list
-
-# Update the package manager cache:
-sudo apt update
-
-# Install
-sudo apt install teams
-
-# Run
-teams
+#	 __     ___  __      __   __   __   ___  __
+#	|__) | |__  |__)    /  ` /  \ |  \ |__  |__)
+#	|    | |___ |  \    \__, \__/ |__/ |___ |  \
+#
+#	Add additional packages
 #======================================================================#
 
+#----------------------------------------------------------------------#
+# Install NIX package manager
+#----------------------------------------------------------------------#
+curl -L https://nixos.org/nix/install | sh
+mkdir ~/.config/nixpkgs
+echo { allowUnfree = true; } > ~/.config/nixpkgs/config.nix
 
-#======================================================================#
-# Dropbox
-#======================================================================#
-# Download the latest installer from 
-https://www.dropbox.com/install-linux
+#----------------------------------------------------------------------#
+# Install packages
+#----------------------------------------------------------------------#
+nix-env -iA nixpkgs.teams nixpkgs.dropbox nixpkgs.onlyoffice-bin
 
-# Install the installer
-sudo apt install ./name-of-dropbox-package.deb
-
-# Install dependencies
-sudo apt install python3-gpg
- 
-# Start the installer
-dropbox start -i
-#======================================================================#
