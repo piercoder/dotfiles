@@ -13,7 +13,7 @@
 #----------------------------------------------------------------------#
 curl -L https://nixos.org/nix/install | sh
 mkdir ~/.config/nixpkgs
-echo { allowUnfree = true; } > ~/.config/nixpkgs/config.nix
+echo '{ allowUnfree = true; }' > ~/.config/nixpkgs/config.nix
 
 #----------------------------------------------------------------------#
 # Install packages
