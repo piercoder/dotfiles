@@ -20,5 +20,5 @@ source ~/.nix-profile/etc/profile.d/nix.sh
 #----------------------------------------------------------------------#
 # Install packages
 #----------------------------------------------------------------------#
-nix-env -iA nixpkgs.teams nixpkgs.dropbox nixpkgs.onlyoffice-bin
+nix-env -iA nixpkgs.teams nixpkgs.maestral nixpkgs.maestral-gui nixpkgs.onlyoffice-bin
 
