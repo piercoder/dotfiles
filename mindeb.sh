@@ -5,7 +5,7 @@
 #   |__) | |__  |__)    /  ` /  \ |  \ |__  |__)
 #   |    | |___ |  \    \__, \__/ |__/ |___ |  \
 #
-#   my debian minimal post installation script
+#   my minimal debian post installation script
 #======================================================================#
 
 # Start with a minimal debian installation
