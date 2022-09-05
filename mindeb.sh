@@ -1,0 +1,46 @@
+#!/bin/bash
+
+#======================================================================#
+#    __     ___  __      __   __   __   ___  __
+#   |__) | |__  |__)    /  ` /  \ |  \ |__  |__)
+#   |    | |___ |  \    \__, \__/ |__/ |___ |  \
+#
+#   my debian minimal post installation script
+#======================================================================#
+
+# Start with a minimal debian installation
+
+# Basic system stuff
+sudo apt install man wget
+
+# Window manager
+sudo apt install i3
+ 
+# Window manager rice
+sudo apt intall feh picom lxappearance fonts-font-awesome 
+
+# Display manager
+lightdm slick-greeter lightdm-settings 
+
+# Audio
+sudo apt install pulseaudio alsa-utils pavucontrol
+
+# Notifications
+dunst libnotify-bin 
+
+# System-tray applets
+flameshot diodon network-manager-gnome 
+
+# Terminal
+sudo apt install kitty
+
+# File manager
+sudo apt install thunar gvfs-backends gvfs-fuse 
+
+# Text editor 
+sudo apt install geany geany-common 
+
+# Browser
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install ./google-chrome-stable*
+rm google-chrome-stable*
