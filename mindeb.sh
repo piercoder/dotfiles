@@ -17,7 +17,7 @@ sudo apt install man wget
 sudo apt install i3
  
 # Window manager rice
-sudo apt intall feh picom lxappearance fonts-font-awesome 
+sudo apt install feh picom lxappearance fonts-font-awesome 
 
 # Display manager
 lightdm slick-greeter lightdm-settings 
