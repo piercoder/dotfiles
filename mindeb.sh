@@ -20,7 +20,7 @@ sudo apt install i3
 sudo apt install feh picom lxappearance fonts-font-awesome 
 
 # Display manager
-lightdm slick-greeter lightdm-settings 
+sudo apt install lightdm slick-greeter lightdm-settings 
 
 # Audio
 sudo apt install pulseaudio alsa-utils pavucontrol
