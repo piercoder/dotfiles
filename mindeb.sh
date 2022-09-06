@@ -26,10 +26,10 @@ sudo apt install lightdm slick-greeter lightdm-settings
 sudo apt install pulseaudio alsa-utils pavucontrol
 
 # Notifications
-dunst libnotify-bin 
+sudo apt install dunst libnotify-bin 
 
 # System-tray applets
-flameshot diodon network-manager-gnome 
+sudo apt install flameshot diodon network-manager-gnome 
 
 # Terminal
 sudo apt install kitty
