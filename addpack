@@ -22,3 +22,6 @@ source ~/.nix-profile/etc/profile.d/nix.sh
 #----------------------------------------------------------------------#
 nix-env -iA nixpkgs.teams nixpkgs.maestral nixpkgs.maestral-gui nixpkgs.onlyoffice-bin
 
+#To be done
+#sudo apt purge libreoffice* firefox-esr* exfalso gimp* gnome-accessibility-themes lynx* mousepad ristretto sane* synaptic vim* xfce4-goodies xfce4-terminal xsane parole
+
