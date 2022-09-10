@@ -23,4 +23,3 @@ source ~/.nix-profile/etc/profile.d/nix.sh
 #----------------------------------------------------------------------#
 nix-env -iA nixpkgs.teams nixpkgs.maestral nixpkgs.maestral-gui nixpkgs.onlyoffice-bin
 #----------------------------------------------------------------------#
-
