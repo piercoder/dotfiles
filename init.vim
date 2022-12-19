@@ -4,6 +4,7 @@ Plug 'morhetz/gruvbox'                      " color scheme
 Plug 'ap/vim-css-color'                     " color code plugin
 Plug 'Raimondi/delimitMate'                 " automatic closing of quotes, parenthesis, brackets, etc
 Plug 'gabrielelana/vim-markdown'            " markdown syntax
+Plug 'airblade/vim-gitgutter'               " git version control system
 call plug#end()
 
 " Settings
@@ -17,9 +18,10 @@ set number relativenumber                   " add relative line numbers
 set cc=88                                   " set a mark at column 88
 set tabstop=4                               " number of columns occupied by a tab character
 set expandtab                               " convert tabs to white spaces
-set shiftwidth=4                            " width for autoindents
-set softtabstop=4                           " see multiple spaces as tabstops so <BS> does the right thing
+set shiftwidth=4                            " width for auto-indents
+set softtabstop=4                           " see multiple spaces as tab-stops so <BS> does the right thing
 set wrap                                    " allow line wrapping
+set spell spelllang=en_us                   " spell check
 
 syntax on
 set background=dark 
