@@ -4,9 +4,12 @@ Plug 'morhetz/gruvbox'                      " color scheme
 Plug 'ap/vim-css-color'                     " color code plugin
 Plug 'Raimondi/delimitMate'                 " automatic closing of quotes, parenthesis, brackets, etc
 Plug 'gabrielelana/vim-markdown'            " markdown syntax
+Plug 'SirVer/ultisnips'                     " snippet engine
+Plug 'honza/vim-snippets'                   " snippets
 call plug#end()
 
 " Settings
+syntax on                                   " syntax highligth
 set nocompatible                            " disable compatibility to old-time vi
 set showmatch                               " show matching brackets
 set ignorecase                              " case insensitive matching
@@ -20,8 +23,11 @@ set expandtab                               " convert tabs to white spaces
 set shiftwidth=4                            " width for autoindents
 set softtabstop=4                           " see multiple spaces as tabstops so <BS> does the right thing
 set wrap                                    " allow line wrapping
-
-syntax on
 set background=dark 
 colorscheme gruvbox
 
+" Ultisnip
+let g:UltiSnipsExpandTrigger="<tab>"
+let g:UltiSnipsJumpForwardTrigger="<c-b>"
+let g:UltiSnipsJumpBackwardTrigger="<c-z>"
+let g:UltiSnipsEditSplit="vertical"
