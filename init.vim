@@ -10,7 +10,7 @@ Plug 'airblade/vim-gitgutter'               " git version control system
 call plug#end()
 
 " Settings
-syntax on                                   " syntax highligth
+syntax on                                   " syntax highlight
 set nocompatible                            " disable compatibility to old-time vi
 set showmatch                               " show matching brackets
 set ignorecase                              " case insensitive matching
