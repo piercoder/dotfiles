@@ -14,20 +14,20 @@ syntax on                                   " syntax highlight
 set nocompatible                            " disable compatibility to old-time vi
 set showmatch                               " show matching brackets
 set ignorecase                              " case insensitive matching
-set mouse=v                                 " mouse support in visual mode
+set mouse=a                                 " mouse support
 set hlsearch                                " highlight search results
 set autoindent                              " indent a new line the same amount as the line just typed
 set number relativenumber                   " add relative line numbers
-set cc=80                                   " set a mark at column 88
+set cc=80                                   " set a mark at column 80
 set textwidth=80                            " text width
 set expandtab                               " convert tabs to white spaces
 set tabstop=4                               " number of columns occupied by a tab character
 set softtabstop=4                           " see multiple spaces as tab-stops so <BS> does the right thing
 set shiftwidth=4                            " width for auto-indents
 set wrap                                    " allow line wrapping
+set linebreak                               " avoid wrapping a line in the middle of a word.
 set spell spelllang=en_us                   " spell check
 
-syntax on
 set background=dark 
 colorscheme gruvbox
 
