@@ -14,6 +14,8 @@ syntax on                                   " syntax highlight
 set nocompatible                            " disable compatibility to old-time vi
 set showmatch                               " show matching brackets
 set ignorecase                              " case insensitive matching
+set smartcase                               " smart case matching (it goes together with ignorecase)
+set incsearch                               " incremental search
 set mouse=a                                 " mouse support
 set hlsearch                                " highlight search results
 set autoindent                              " indent a new line the same amount as the line just typed
@@ -27,7 +29,6 @@ set shiftwidth=4                            " width for auto-indents
 set wrap                                    " allow line wrapping
 set linebreak                               " avoid wrapping a line in the middle of a word.
 set spell spelllang=en_us                   " spell check
-
 set background=dark 
 colorscheme gruvbox
 
