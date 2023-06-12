@@ -1,6 +1,6 @@
 " Loading plugins 
 call plug#begin('~/.config/nvim/plugged')   " specify plugin directory
-Plug 'morhetz/gruvbox'                      " color scheme
+Plug 'doums/darcula'                " color scheme
 Plug 'ap/vim-css-color'                     " color code plugin
 Plug 'Raimondi/delimitMate'                 " automatic closing of quotes, parenthesis, brackets, etc
 Plug 'gabrielelana/vim-markdown'            " markdown syntax
@@ -30,7 +30,7 @@ set wrap                                    " allow line wrapping
 set linebreak                               " avoid wrapping a line in the middle of a word.
 set spell spelllang=en_us                   " spell check
 set background=dark 
-colorscheme gruvbox
+colorscheme darcula
 
 " Ultisnip
 let g:UltiSnipsExpandTrigger="<tab>"
