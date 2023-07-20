@@ -28,7 +28,7 @@ set softtabstop=4                           " see multiple spaces as tab-stops s
 set shiftwidth=4                            " width for auto-indents
 set wrap                                    " allow line wrapping
 set linebreak                               " avoid wrapping a line in the middle of a word.
-set spell spelllang=en_us,it_it             " spell check
+set spell spelllang=en_us,it                " spell check
 set background=dark 
 colorscheme darcula
 
