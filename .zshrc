@@ -105,10 +105,7 @@ RPROMPT="%B%F{yellow}[%f%F{cyan}%*%f%F{yellow}]%f%b"
 #----------------------------------------------------------------------#
 # Aliases
 #----------------------------------------------------------------------#
-alias ls='ls -G'
-alias ll='ls -alh'
-
-alias stata='open -n /Applications/Stata/StataSE.app'
+alias ll='exa -alhG --icons'
 
 alias myip="curl http://ipecho.net/plain; echo"
 
