@@ -11,12 +11,13 @@ autocmd VimEnter * if len(filter(values(g:plugs), '!isdirectory(v:val.dir)'))
 
 " Loading plugins 
 call plug#begin('~/.vim/plugged')   	    " specify plugin directory
-Plug 'doums/darcula'   		            " color scheme
+Plug 'sainnhe/sonokai'                      " color scheme
 Plug 'ap/vim-css-color'                     " color code plugin
 Plug 'Raimondi/delimitMate'                 " automatic closing of quotes, parenthesis, brackets, etc
 Plug 'gabrielelana/vim-markdown'            " markdown syntax
 Plug 'honza/vim-snippets'                   " snippets
 Plug 'airblade/vim-gitgutter'               " git version control system
+Plug 'tpope/vim-eunuch'                     " sudo and unix command
 call plug#end()
 
 " Settings
@@ -40,5 +41,4 @@ set wrap                                    " allow line wrapping
 set linebreak                               " avoid wrapping a line in the middle of a word.
 set spell spelllang=en_us,it                " spell check
 set background=dark 
-colorscheme darcula
-
+colorscheme sonokai
