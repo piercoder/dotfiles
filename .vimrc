@@ -10,12 +10,11 @@ autocmd VimEnter * if len(filter(values(g:plugs), '!isdirectory(v:val.dir)'))
 \| endif
 
 " Loading plugins 
-call plug#begin('~/.config/nvim/plugged')   " specify plugin directory
-Plug 'doums/darcula'                " color scheme
+call plug#begin('~/.vim/plugged')   	    " specify plugin directory
+Plug 'doums/darcula'   		            " color scheme
 Plug 'ap/vim-css-color'                     " color code plugin
 Plug 'Raimondi/delimitMate'                 " automatic closing of quotes, parenthesis, brackets, etc
 Plug 'gabrielelana/vim-markdown'            " markdown syntax
-Plug 'SirVer/ultisnips'                     " snippet engine
 Plug 'honza/vim-snippets'                   " snippets
 Plug 'airblade/vim-gitgutter'               " git version control system
 call plug#end()
@@ -43,8 +42,3 @@ set spell spelllang=en_us,it                " spell check
 set background=dark 
 colorscheme darcula
 
-" Ultisnip
-let g:UltiSnipsExpandTrigger="<tab>"
-let g:UltiSnipsJumpForwardTrigger="<c-b>"
-let g:UltiSnipsJumpBackwardTrigger="<c-z>"
-let g:UltiSnipsEditSplit="vertical"
