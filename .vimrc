@@ -18,6 +18,7 @@ Plug 'gabrielelana/vim-markdown'            " markdown syntax
 Plug 'honza/vim-snippets'                   " snippets
 Plug 'airblade/vim-gitgutter'               " git version control system
 Plug 'tpope/vim-eunuch'                     " sudo and unix command
+Plug 'itchyny/lightline.vim'                " nice status line
 call plug#end()
 
 " Settings
@@ -40,5 +41,6 @@ set shiftwidth=4                            " width for auto-indents
 set wrap                                    " allow line wrapping
 set linebreak                               " avoid wrapping a line in the middle of a word.
 set spell spelllang=en_us,it                " spell check
+set laststatus=2                            " status line
 set background=dark 
 colorscheme sonokai
