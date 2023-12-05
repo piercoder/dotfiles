@@ -105,7 +105,7 @@ RPROMPT="%B%F{yellow}[%f%F{cyan}%*%f%F{yellow}]%f%b"
 #----------------------------------------------------------------------#
 # Aliases
 #----------------------------------------------------------------------#
-alias ll='exa -alhg --icons'
+alias ll='eza -alhg --icons'
 
 alias myip="curl http://ipecho.net/plain; echo"
 
