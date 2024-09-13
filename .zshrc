@@ -1,169 +1,177 @@
 #======================================================================#
-#	 __     ___  __      __   __   __   ___  __
-#	|__) | |__  |__)    /  ` /  \ |  \ |__  |__)
-#	|    | |___ |  \    \__, \__/ |__/ |___ |  \
+#   __     ___  __      __   __   __   ___  __
+#   |__) | |__  |__)    /  ` /  \ |  \ |__  |__)
+#   |    | |___ |  \    \__, \__/ |__/ |___ |  \
 #
-#	My .zshrc file for MacOs
+#   My optimized .zshrc file for MacOS with enhanced functions and aliases
 #======================================================================#
 
 
+#----------------------------------------------------------------------#
+# Environment Settings and Initial Configurations
+#----------------------------------------------------------------------#
 
-#----------------------------------------------------------------------#
-# Default stuff
-#----------------------------------------------------------------------#
-# Correctly display UTF-8 with combining characters.
+# Ensure UTF-8 is correctly displayed
 if [[ "$(locale LC_CTYPE)" == "UTF-8" ]]; then
     setopt COMBINING_CHARS
 fi
 
-# Disable the log builtin, so we don't conflict with /usr/bin/log
+# Disable conflicting log builtin
 disable log
 
-# Save command history
+# Command history settings
 HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
-HISTSIZE=2000
-SAVEHIST=1000
+HISTSIZE=5000
+SAVEHIST=2000
+setopt INC_APPEND_HISTORY       # Immediately append to history file
+setopt SHARE_HISTORY            # Share command history across terminals
+setopt HIST_IGNORE_DUPS         # Don't store duplicate commands
+setopt HIST_REDUCE_BLANKS       # Remove superfluous blanks
 
 # Beep on error
 setopt BEEP
 
-# Use keycodes (generated via zkbd) if present, otherwise fallback on
-# values from terminfo
-if [[ -r ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR} ]] ; then
+# Better autocomplete settings
+autoload -Uz compinit
+compinit -C                    # Speed up autocomplete caching
+
+# Terminal key bindings
+if [[ -r ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR} ]]; then
     source ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR}
 else
     typeset -g -A key
 
-    [[ -n "$terminfo[kf1]" ]] && key[F1]=$terminfo[kf1]
-    [[ -n "$terminfo[kf2]" ]] && key[F2]=$terminfo[kf2]
-    [[ -n "$terminfo[kf3]" ]] && key[F3]=$terminfo[kf3]
-    [[ -n "$terminfo[kf4]" ]] && key[F4]=$terminfo[kf4]
-    [[ -n "$terminfo[kf5]" ]] && key[F5]=$terminfo[kf5]
-    [[ -n "$terminfo[kf6]" ]] && key[F6]=$terminfo[kf6]
-    [[ -n "$terminfo[kf7]" ]] && key[F7]=$terminfo[kf7]
-    [[ -n "$terminfo[kf8]" ]] && key[F8]=$terminfo[kf8]
-    [[ -n "$terminfo[kf9]" ]] && key[F9]=$terminfo[kf9]
-    [[ -n "$terminfo[kf10]" ]] && key[F10]=$terminfo[kf10]
-    [[ -n "$terminfo[kf11]" ]] && key[F11]=$terminfo[kf11]
-    [[ -n "$terminfo[kf12]" ]] && key[F12]=$terminfo[kf12]
-    [[ -n "$terminfo[kf13]" ]] && key[F13]=$terminfo[kf13]
-    [[ -n "$terminfo[kf14]" ]] && key[F14]=$terminfo[kf14]
-    [[ -n "$terminfo[kf15]" ]] && key[F15]=$terminfo[kf15]
-    [[ -n "$terminfo[kf16]" ]] && key[F16]=$terminfo[kf16]
-    [[ -n "$terminfo[kf17]" ]] && key[F17]=$terminfo[kf17]
-    [[ -n "$terminfo[kf18]" ]] && key[F18]=$terminfo[kf18]
-    [[ -n "$terminfo[kf19]" ]] && key[F19]=$terminfo[kf19]
-    [[ -n "$terminfo[kf20]" ]] && key[F20]=$terminfo[kf20]
-    [[ -n "$terminfo[kbs]" ]] && key[Backspace]=$terminfo[kbs]
-    [[ -n "$terminfo[kich1]" ]] && key[Insert]=$terminfo[kich1]
-    [[ -n "$terminfo[kdch1]" ]] && key[Delete]=$terminfo[kdch1]
-    [[ -n "$terminfo[khome]" ]] && key[Home]=$terminfo[khome]
-    [[ -n "$terminfo[kend]" ]] && key[End]=$terminfo[kend]
-    [[ -n "$terminfo[kpp]" ]] && key[PageUp]=$terminfo[kpp]
-    [[ -n "$terminfo[knp]" ]] && key[PageDown]=$terminfo[knp]
-    [[ -n "$terminfo[kcuu1]" ]] && key[Up]=$terminfo[kcuu1]
-    [[ -n "$terminfo[kcub1]" ]] && key[Left]=$terminfo[kcub1]
-    [[ -n "$terminfo[kcud1]" ]] && key[Down]=$terminfo[kcud1]
-    [[ -n "$terminfo[kcuf1]" ]] && key[Right]=$terminfo[kcuf1]
+    # Extract keybindings from terminfo
+    for k in {F1..F12} kbs kich1 kdch1 khome kend kpp knp kcuu1 kcub1 kcud1 kcuf1; do
+        [[ -n "$terminfo[$k]" ]] && key[$k]=$terminfo[$k]
+    done
 fi
 
-# Default key bindings
+# Key bindings for navigation
 [[ -n ${key[Delete]} ]] && bindkey "${key[Delete]}" delete-char
 [[ -n ${key[Home]} ]] && bindkey "${key[Home]}" beginning-of-line
 [[ -n ${key[End]} ]] && bindkey "${key[End]}" end-of-line
 [[ -n ${key[Up]} ]] && bindkey "${key[Up]}" up-line-or-search
 [[ -n ${key[Down]} ]] && bindkey "${key[Down]}" down-line-or-search
 
-# Useful support for interacting with Terminal.app or other terminal programs
-[ -r "/etc/zshrc_$TERM_PROGRAM" ] && . "/etc/zshrc_$TERM_PROGRAM"
-#----------------------------------------------------------------------#
-
-
-
-#----------------------------------------------------------------------#
-# Auto completion
-#----------------------------------------------------------------------#
+# Autocomplete settings
 zstyle ':completion:*' menu select
-
 zstyle ':completion::complete:*' gain-privileges 1
+
+# Source terminal-specific configurations
+[ -r "/etc/zshrc_$TERM_PROGRAM" ] && source "/etc/zshrc_$TERM_PROGRAM"
+
+#----------------------------------------------------------------------#
+# Prompt and Appearance
 #----------------------------------------------------------------------#
 
+# Default prompt using Starship if available
+if command -v starship &> /dev/null; then
+    eval "$(starship init zsh)"
+else
+    PROMPT="%B%F{yellow}[%f%F{cyan}%~%f%F{yellow}]%f%F{red}▶%f%b "
+    RPROMPT="%B%F{yellow}[%f%F{cyan}%*%f%F{yellow}]%f%b"
+fi
 
-
-#----------------------------------------------------------------------#
-# My prompt
-#----------------------------------------------------------------------#
-# Default prompt
-#PS1="%n@%m %1~ %# "
-
-PROMPT="%B%F{yellow}[%f%F{cyan}%~%f%F{yellow}]%f%F{red}▶%f%b "
-RPROMPT="%B%F{yellow}[%f%F{cyan}%*%f%F{yellow}]%f%b"
-#----------------------------------------------------------------------#
-
-
+# Syntax highlighting (use lazy loading for better performance)
+if [ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
+    source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+fi
 
 #----------------------------------------------------------------------#
 # Aliases
 #----------------------------------------------------------------------#
-alias ll='eza -alhg --icons'
 
-alias myip="curl http://ipecho.net/plain; echo"
+# Check if eza exists, otherwise fallback to ls
+if command -v eza &> /dev/null; then
+    alias ll='eza -alhg --icons'
+else
+    alias ll='ls -alh'
+fi
 
+# System aliases
 alias gitup='git add . && git commit -m "Update: $(date)" && git push'
-
 alias brewup='brew update && brew upgrade && brew doctor && brew cleanup'
-
 alias cleanup='sudo periodic daily weekly monthly'
-
 alias reboot='sudo reboot'
 alias shutdown='sudo shutdown -h now'
+alias reload='source ~/.zshrc'
 
-alias monitorcpumem='sudo htop'
-alias monitornet='sudo jnettop'
-alias monitordisk='sudo ncdu /'
+# Network aliases
+alias localip="ipconfig getifaddr en0"
+alias publicip="curl ifconfig.me"
+alias netinfo="ifconfig -a"
+alias openports()="sudo lsof -i -P -n | grep LISTEN"
+
+# Sustem monitor aliases
+alias sysmon=top -l 1 | grep -E "^CPU|^PhysMem"
+
+#----------------------------------------------------------------------#
+#  Functions
 #----------------------------------------------------------------------#
 
-
-
-#----------------------------------------------------------------------#
-# Functions
-#----------------------------------------------------------------------#
-function hunt {
-    find / -iname "*$1*" 2>/dev/null
+# Find Files by Name
+function f() {
+    find . -name "$1"
 }
+
+# Search Command History
+function hgrep() {
+    history | grep "$1"
+}
+
+# Copy Last Command to Clipboard
+function clast() {
+    fc -ln -1 | pbcopy
+}
+
+# Quick Note Taking
+function note() {
+    echo "$(date): $1" >> ~/notes.txt
+    echo "Note added!"
+}
+
+# Timer Function
+function timer() {
+    local T=$1
+    echo "Timer set for $T seconds."
+    sleep $T && echo "Time's up!"
+}
+
+#----------------------------------------------------------------------#
+# Path and Environment Variables
 #----------------------------------------------------------------------#
 
-
-
-#----------------------------------------------------------------------#
-# Load the prompt theme system
-#----------------------------------------------------------------------#
-autoload -Uz compinit
-compinit
-
-# First you need to install zsh-syntax-highlighting:
-# brew install zsh-syntax-highlighting
-source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-#----------------------------------------------------------------------#
-
-
-
-#----------------------------------------------------------------------#
-# pnpm 
-#----------------------------------------------------------------------#
+# Add PNPM to PATH
 export PNPM_HOME="/Users/pier/Library/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
-esac
-#----------------------------------------------------------------------#
-
-
+[[ ":$PATH:" != *":$PNPM_HOME:"* ]] && export PATH="$PNPM_HOME:$PATH"
 
 #----------------------------------------------------------------------#
-# starship prompt
-#----------------------------------------------------------------------#
-eval "$(starship init zsh)"
+# Utility and Performance Settings
 #----------------------------------------------------------------------#
 
+# Faster directory navigation with autojump
+if command -v autojump &> /dev/null; then
+    . $(brew --prefix autojump)/share/autojump/autojump.zsh
+fi
 
+# Enable globbing for better wildcard expansion
+setopt EXTENDED_GLOB
+
+# Faster startup by deferring the loading of some plugins
+autoload -Uz vcs_info
+zstyle ':vcs_info:*' enable git cvs svn
+
+#----------------------------------------------------------------------#
+# Plugins and Additional Configurations
+#----------------------------------------------------------------------#
+
+# Load auto-suggestions if available
+if [ -f /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
+    source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+fi
+
+# Load the Starship prompt if installed
+if command -v starship &> /dev/null; then
+    eval "$(starship init zsh)"
+fi
