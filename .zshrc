@@ -144,20 +144,14 @@ function timer() {
 
 #----------------------------------------------------------------------#
 # Path and Environment Variables
-#----------------------------------------------------------------------#
+#----------------------------------------------------------------------## Add PNPM to PATH
 
-# Add PNPM to PATH
 export PNPM_HOME="/Users/pier/Library/pnpm"
 [[ ":$PATH:" != *":$PNPM_HOME:"* ]] && export PATH="$PNPM_HOME:$PATH"
 
 #----------------------------------------------------------------------#
 # Utility and Performance Settings
-#----------------------------------------------------------------------#
-
-# Faster directory navigation with autojump
-if command -v autojump &> /dev/null; then
-    . $(brew --prefix autojump)/share/autojump/autojump.zsh
-fi
+#----------------------------------------------------------------------
 
 # Enable globbing for better wildcard expansion
 setopt EXTENDED_GLOB
@@ -169,7 +163,6 @@ zstyle ':vcs_info:*' enable git cvs svn
 #----------------------------------------------------------------------#
 # Plugins and Additional Configurations
 #----------------------------------------------------------------------#
-
 # Load auto-suggestions if available
 if [ -f /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
     source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
