@@ -101,7 +101,6 @@ alias reload='source ~/.zshrc'
 alias localip="ipconfig getifaddr en0"
 alias publicip="curl ifconfig.me"
 alias netinfo="ifconfig -a"
-alias openports()="sudo lsof -i -P -n | grep LISTEN"
 
 # Sustem monitor aliases
 alias sysmon=top -l 1 | grep -E "^CPU|^PhysMem"
@@ -129,6 +128,11 @@ function clast() {
 function note() {
     echo "$(date): $1" >> ~/notes.txt
     echo "Note added!"
+}
+
+# Find Open Ports
+function openports() {
+    sudo lsof -i -P -n | grep LISTEN
 }
 
 # Timer Function
