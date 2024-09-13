@@ -103,7 +103,7 @@ alias publicip="curl ifconfig.me"
 alias netinfo="ifconfig -a"
 
 # Sustem monitor aliases
-alias sysmon=top -l 1 | grep -E "^CPU|^PhysMem"
+alias sysmon='top -l 1 | grep -E "^CPU|^PhysMem"'
 
 #----------------------------------------------------------------------#
 #  Functions
