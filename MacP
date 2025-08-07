@@ -1,0 +1,121 @@
+#!/bin/sh
+
+# Exit on error
+set -e
+
+echo "Optimizing macOS performance..."
+
+# --- System Interface ---
+defaults write -g NSScrollViewRubberbanding -bool false      # Disable rubberband scrolling effect
+defaults write -g QLPanelAnimationDuration -float 0          # Reduce Quick Look animation duration
+
+# --- Activity Monitor ---
+defaults write com.apple.ActivityMonitor IconType -int 0     # Show CPU icon in Dock
+defaults write com.apple.ActivityMonitor UpdatePeriod -int 5 # Update data every 5 seconds
+
+# --- Dock ---
+defaults write com.apple.dock autohide-delay -float 0        # No delay for Dock auto-hide
+defaults write com.apple.dock autohide-time-modifier -float 0 # No animation for Dock auto-hide
+defaults write com.apple.dock autohide -bool false           # Disable Dock auto-hide
+defaults write com.apple.dock enable-spring-load-actions-on-all-items -bool false # Disable spring loading actions
+defaults write com.apple.dock expose-animation-duration -float 0 # No Mission Control animation
+defaults write com.apple.dock launchanim -bool false         # Disable app launch animation
+defaults write com.apple.dock mineffect -string scale        # Use "scale" effect for window minimization
+defaults write com.apple.dock mru-spaces -bool true          # Automatically reorder recent spaces
+defaults write com.apple.dock orientation -string bottom      # Place Dock at the bottom
+defaults write com.apple.dock show-recents -bool false       # Hide recent apps in Dock
+defaults write com.apple.dock static-only -bool false        # Show all apps in Dock
+defaults write com.apple.dock tilesize -int 48               # Set Dock icon size
+
+# --- Mission Control ---
+defaults write com.apple.dock expose-animation-duration -float 0 # No Mission Control animation
+defaults write com.apple.dock mru-spaces -bool true              # Automatically reorder recent spaces
+
+# --- Finder ---
+defaults write com.apple.finder _FXSortFoldersFirst -bool true           # Show folders before files
+defaults write com.apple.finder _FXSortFoldersFirstOnDesktop -bool false # Show files before folders on desktop
+defaults write com.apple.finder AppleShowAllFiles -bool true             # Show hidden files
+defaults write com.apple.finder CreateDesktop -bool true                 # Show icons on desktop
+defaults write com.apple.finder FXDefaultSearchScope -string SCev        # Default search in current folder
+defaults write com.apple.finder FXEnableExtensionChangeWarning -bool true # Warn when changing file extension
+defaults write com.apple.finder FXPreferredViewStyle -string Nlsv        # Default to list view
+defaults write com.apple.finder FXRemoveOldTrashItems -bool true         # Remove old items from Trash automatically
+defaults write com.apple.finder QuitMenuItem -bool true                  # Enable "Quit Finder" menu
+defaults write com.apple.finder ShowExternalHardDrivesOnDesktop -bool true # Show external drives on desktop
+defaults write com.apple.finder ShowHardDrivesOnDesktop -bool false      # Hide internal drives on desktop
+defaults write com.apple.finder ShowMountedServersOnDesktop -bool false  # Hide mounted servers on desktop
+defaults write com.apple.finder ShowPathbar -bool true                   # Show path bar
+
+# --- Help Viewer ---
+defaults write com.apple.helpviewer DevMode -bool false                  # Disable Help Viewer developer mode
+
+# --- Menu Bar ---
+defaults write com.apple.menuextra.clock FlashDateSeparators -bool false # Disable flashing date/time separators
+
+# --- Music ---
+defaults write com.apple.Music userWantsPlaybackNotifications -bool false # Disable playback notifications
+
+# --- Safari ---
+sudo defaults write com.apple.Safari WebKitInitialTimedLayoutDelay -float 0.25 # Reduce initial layout delay
+
+# --- Screenshot ---
+defaults write com.apple.screencapture disable-shadow -bool false         # Keep shadow in screenshots
+defaults write com.apple.screencapture include-date -bool true           # Include date in screenshot filename
+defaults write com.apple.screencapture location -string ~/Desktop        # Save screenshots to Desktop
+defaults write com.apple.screencapture show-thumbnail -bool false        # Hide screenshot thumbnail preview
+defaults write com.apple.screencapture type -string png                  # Use PNG format for screenshots
+
+# --- TextEdit ---
+defaults write com.apple.TextEdit RichText -bool true                    # New documents in RTF format
+
+# --- Time Machine ---
+defaults write com.apple.TimeMachine DoNotOfferNewDisksForBackup -bool false # Show new disks for backup
+
+# --- Accessibility ---
+sudo defaults write com.apple.universalaccess reduceTransparency -bool true   # Reduce transparency for better performance
+sudo defaults write com.apple.universalaccess showWindowTitlebarIcons -bool true # Show icons in window title bar
+
+# --- Global Domain ---
+defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool true        # Enable press-and-hold for special characters
+defaults write NSGlobalDomain AppleShowAllExtensions -bool true          # Show all file extensions
+defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false # Disable window animations
+defaults write NSGlobalDomain NSDocumentSaveNewDocumentsToCloud -bool true   # Save new documents to iCloud by default
+defaults write NSGlobalDomain NSTableViewDefaultSizeMode -int 2          # Default table size
+defaults write NSGlobalDomain NSToolbarTitleViewRolloverDelay -float 0   # No toolbar rollover delay
+defaults write NSGlobalDomain WebKitScrollAnimationEnabled -bool false   # Disable WebKit scroll animations
+
+# --- Additional Tweaks ---
+defaults write com.apple.dashboard mcx-disabled -bool true               # Disable Dashboard
+defaults write com.apple.loginwindow TALLogoutSavesState -bool false     # Don't reopen apps after restart
+defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false # Don't relaunch apps after login
+for vol in /Volumes/*; do
+    name="$(basename "$vol")"
+    # Skip system mounts and hidden directories
+    if [ -d "$vol" ] && [ ! -L "$vol" ] && [ "$name" != "Data" ] && [ "${name#\.}" = "$name" ]; then
+        sudo mdutil -i off "$vol"
+    fi
+done
+sudo softwareupdate --schedule on                                      # Disable automatic updates
+
+# --- System Maintenance ---
+echo "Running system maintenance..."
+softwareupdate -i -a                                                   # Install all available updates
+sudo rm -rf /Library/Caches/* 2>/dev/null                               # Clear system cache
+sudo rm -rf ~/Library/Caches/*                                          # Clear user cache
+
+# Restart apps to apply changes
+for app in "Activity Monitor" Dock Finder Music Safari SystemUIServer TextEdit; do
+    killall "$app" 2>/dev/null || true  # Restart each app to apply changes
+done
+
+# --- Clear logs ---
+echo "Clearing system logs..."
+sudo rm -rf /Library/Logs/*                                             # Clear system logs
+sudo rm -rf ~/Library/Logs/*                                            # Clear user logs
+sudo rm -rf /private/var/log/*                                          # Clear temporary logs
+
+# --- Free inactive memory ---
+echo "Freeing inactive memory..."
+sudo purge                                                             # Free inactive RAM
+
+echo "Optimization complete! Restart your Mac to apply all changes."
