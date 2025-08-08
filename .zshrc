@@ -162,6 +162,9 @@ if command -v direnv &> /dev/null; then
     eval "$(direnv hook zsh)"
 fi
 
+# Add user Python bin directory to PATH
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"
+
 #----------------------------------------------------------------------#
 # Utility and Performance Settings
 #----------------------------------------------------------------------#
