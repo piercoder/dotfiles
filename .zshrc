@@ -181,3 +181,5 @@ zstyle ':vcs_info:*' enable git cvs svn
 if [ -f /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
     source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 fi
+
+~/dotfiles/infomac
