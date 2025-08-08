@@ -1,18 +1,18 @@
 format = """
-[](#2c2c2e)\
-[  ](bg:#2c2c2e fg:#d0d0d0)\
-[](bg:#1e1e1e fg:#2c2c2e)\
+[](#d0d0d0)\
+[  ](bg:#d0d0d0 fg:#ff3b30)\
+[](bg:#2c2c2e fg:#d0d0d0)\
 $directory\
-[](fg:#1e1e1e bg:#2c2c2e)\
+[](fg:#2c2c2e bg:#d0d0d0)\
 $git_branch\
 $git_status\
-[](fg:#2c2c2e)\
+[](fg:#d0d0d0)\
 """
 
 add_newline = false
 
 [directory]
-style = "fg:#ffffff bg:#1e1e1e"
+style = "fg:#d0d0d0 bg:#2c2c2e"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -26,8 +26,8 @@ truncation_symbol = "…/"
 [git_branch]
 symbol = ""
 style = "bg:#2c2c2e"
-format = '[[ $symbol $branch ](fg:#ffffff bg:#2c2c2e)]($style)'
+format = '[[ $symbol $branch ](fg:#2c2c2e bg:#d0d0d0)]($style)'
 
 [git_status]
 style = "bg:#2c2c2e"
-format = '[[($all_status$ahead_behind )](fg:#aaaaaa bg:#2c2c2e)]($style)'
+format = '[[($all_status$ahead_behind )](fg:#2c2c2e bg:#d0d0d0)]($style)'
