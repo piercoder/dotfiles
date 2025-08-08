@@ -22,7 +22,7 @@ defaults write com.apple.dock expose-animation-duration -float 0 # No Mission Co
 defaults write com.apple.dock launchanim -bool false         # Disable app launch animation
 defaults write com.apple.dock mineffect -string scale        # Use "scale" effect for window minimization
 defaults write com.apple.dock mru-spaces -bool true          # Automatically reorder recent spaces
-defaults write com.apple.dock orientation -string bottom      # Place Dock at the bottom
+defaults write com.apple.dock orientation -string bottom     # Place Dock at the bottom
 defaults write com.apple.dock show-recents -bool false       # Hide recent apps in Dock
 defaults write com.apple.dock static-only -bool false        # Show all apps in Dock
 defaults write com.apple.dock tilesize -int 48               # Set Dock icon size
@@ -59,7 +59,7 @@ defaults write com.apple.Music userWantsPlaybackNotifications -bool false # Disa
 sudo defaults write com.apple.Safari WebKitInitialTimedLayoutDelay -float 0.25 # Reduce initial layout delay
 
 # --- Screenshot ---
-defaults write com.apple.screencapture disable-shadow -bool false         # Keep shadow in screenshots
+defaults write com.apple.screencapture disable-shadow -bool false        # Keep shadow in screenshots
 defaults write com.apple.screencapture include-date -bool true           # Include date in screenshot filename
 defaults write com.apple.screencapture location -string ~/Desktop        # Save screenshots to Desktop
 defaults write com.apple.screencapture show-thumbnail -bool false        # Hide screenshot thumbnail preview
@@ -88,25 +88,28 @@ defaults write NSGlobalDomain WebKitScrollAnimationEnabled -bool false   # Disab
 defaults write com.apple.dashboard mcx-disabled -bool true               # Disable Dashboard
 defaults write com.apple.loginwindow TALLogoutSavesState -bool false     # Don't reopen apps after restart
 defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false # Don't relaunch apps after login
-for vol in /Volumes/*; do
-    name="$(basename "$vol")"
-    # Skip system mounts and hidden directories
-    if [ -d "$vol" ] && [ ! -L "$vol" ] && [ "$name" != "Data" ] && [ "${name#\.}" = "$name" ]; then
-        sudo mdutil -i off "$vol"
-    fi
-done
-sudo softwareupdate --schedule on                                      # Disable automatic updates
 
+# --- Disable Spotlight indexing only on external volumes ---
+for vol in /Volumes/*; do
+    [ ! -d "$vol" ] && continue
+    [ -L "$vol" ] && continue
+    diskutil info "$vol" | grep -q "External:.*Yes" || continue
+    echo "Disabling Spotlight indexing on $vol"
+    sudo mdutil -i off "$vol" 2>/dev/null
+done
+sudo mdutil -i on / # Ensure Spotlight indexing is enabled on the main volume
+                                     
 # --- System Maintenance ---
 echo "Running system maintenance..."
-softwareupdate -i -a                                                   # Install all available updates
+softwareupdate -i -a                                                    # Install all available updates
 sudo rm -rf /Library/Caches/* 2>/dev/null                               # Clear system cache
 sudo rm -rf ~/Library/Caches/*                                          # Clear user cache
 
 # Restart apps to apply changes
-for app in "Activity Monitor" Dock Finder Music Safari SystemUIServer TextEdit; do
-    killall "$app" 2>/dev/null || true  # Restart each app to apply changes
-done
+killall Activity\ Monitor Dock Finder Music Safari SystemUIServer TextEdit 2>/dev/null || true
+
+# --- Enable automatic updates ---
+sudo softwareupdate --schedule on # Enable automatic updates
 
 # --- Clear logs ---
 echo "Clearing system logs..."
