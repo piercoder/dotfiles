@@ -1,0 +1,76 @@
+#!/bin/sh
+
+#========================#
+#      Colors
+#========================#
+RED='\033[38;2;10;132;255m'
+NC='\033[0m'
+BOLD='\033[1m'
+
+#========================#
+#    System Information
+#========================#
+USER_INFO="$(whoami)@$(hostname)"
+OS="$(sw_vers -productName) $(sw_vers -productVersion)"
+KERNEL="$(uname -sr)"
+UPTIME="$(uptime | sed 's/^.*up *//; s/,.*//' | sed 's/  / /g')"
+
+#========================#
+#     Hardware Info
+#========================#
+CPU_MODEL="$(sysctl -n machdep.cpu.brand_string)"
+CPU_USAGE="$(ps -A -o %cpu | awk 'NR>1 {sum+=$1} END {printf("%.0f", sum)}')"
+CPU="$CPU_MODEL (${CPU_USAGE}%)"
+
+PAGE_SIZE=$(vm_stat | awk '/page size of/ {print $8}')
+ACTIVE=$(vm_stat | awk '/Pages active/ {gsub(/\./,""); print $3}')
+WIRED=$(vm_stat | awk '/Pages wired down/ {gsub(/\./,""); print $4}')
+USED_MB=$(( (ACTIVE + WIRED) * PAGE_SIZE / 1024 / 1024 ))
+TOTAL_MB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 ))
+RAM_PERC=$(( USED_MB * 100 / TOTAL_MB ))
+USED_GIB=$(echo "scale=1; $USED_MB / 1024" | bc)
+TOTAL_GIB=$(echo "scale=1; $TOTAL_MB / 1024" | bc)
+MEMORY="$(printf "%s / %s GiB (%s%%)" "$USED_GIB" "$TOTAL_GIB" "$RAM_PERC")"
+
+DISK_BLOCKS=$(df -k / | awk 'NR==2 {print $3, $2}')
+DISK_USED_KB=$(echo "$DISK_BLOCKS" | awk '{print $1}')
+DISK_TOTAL_KB=$(echo "$DISK_BLOCKS" | awk '{print $2}')
+DISK_PERC=$(df -h / | awk 'NR==2 {print $5}')
+DISK_USED_GIB=$(echo "scale=1; $DISK_USED_KB / 1048576" | bc)
+DISK_TOTAL_GIB=$(echo "scale=1; $DISK_TOTAL_KB / 1048576" | bc)
+DISK="$(printf "%s / %s GiB (%s)" "$DISK_USED_GIB" "$DISK_TOTAL_GIB" "$DISK_PERC")"
+
+#========================#
+#     Packages (brew)
+#========================#
+BREW_PACKAGES=$(brew list 2>/dev/null | wc -l | xargs)
+CASK_PACKAGES=$(brew list --cask 2>/dev/null | wc -l | xargs)
+
+#========================#
+#     Network Info
+#========================#
+IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "Unavailable")"
+
+#========================#
+#        Output
+#========================#
+
+echo ""
+echo "                     ..'          ${BOLD}${RED}┌──────────── System ────────────┐${NC}"
+echo "                 ,xNMM.           ${RED}│${NC} User:     $USER_INFO"
+echo "               .OMMMMo            ${RED}│${NC} OS:       $OS"
+echo "               lMM\"               ${RED}│${NC} Kernel:   $KERNEL"
+echo "     .;loddo:.  .olloddol;.       ${RED}│${NC} Uptime:   $UPTIME"
+echo "   cKMMMMMMMMMMNWMMMMMMMMMM0:     ${RED}│${NC} Packages: ${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)"
+echo " .KMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${RED}└────────────────────────────────┘${NC}"
+echo " XMMMMMMMMMMMMMMMMMMMMMMMX.       ${BOLD}${RED}┌─────────── Hardware ───────────┐${NC}"
+echo ";MMMMMMMMMMMMMMMMMMMMMMMM:        ${RED}│${NC} CPU:      $CPU"
+echo ":MMMMMMMMMMMMMMMMMMMMMMMM:        ${RED}│${NC} RAM:      $MEMORY"
+echo ".MMMMMMMMMMMMMMMMMMMMMMMX.        ${RED}│${NC} Disk:     $DISK"
+echo " kMMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${RED}└────────────────────────────────┘${NC}"
+echo " 'XMMMMMMMMMMMMMMMMMMMMMMMMMMk    ${BOLD}${RED}┌─────────── Network ────────────┐${NC}"
+echo "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.    ${RED}│${NC} IP:       $IP"
+echo "    kMMMMMMMMMMMMMMMMMMMMMMd      ${BOLD}${RED}└────────────────────────────────┘${NC}"
+echo "     ;KMMMMMMMWXXWMMMMMMMk.       "
+echo "       \"cooc*\"    \"*coo'\"         "
+echo ""
