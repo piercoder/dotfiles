@@ -20,7 +20,7 @@ truncation_symbol = "…/"
 [directory.substitutions]
 "Documents" = " "
 "Downloads" = " "
-"Music" = "𝄢 "
+"Music" = " "
 "Pictures" = " "
 
 [git_branch]
