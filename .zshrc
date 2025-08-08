@@ -84,7 +84,7 @@ alias cat='bat' # use bat if installed, otherwise cat
 command -v bat &>/dev/null || alias bat='cat'
 
 alias gitup='git add . && git commit -m "Update: $(date)" && git push'
-alias brewup='brew update && brew upgrade && brew doctor && brew cleanup'
+alias brewup='brew update && brew upgrade && brew autoremove && brew cleanup && brew doctor'
 alias cleanup='sudo periodic daily weekly monthly'
 alias reboot='sudo reboot'
 alias shutdown='sudo shutdown -h now'
