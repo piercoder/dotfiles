@@ -3,7 +3,7 @@
 #========================#
 #      Colors
 #========================#
-RED='\033[38;2;10;132;255m'
+ACCENT='\033[38;2;10;132;255m'
 NC='\033[0m'
 BOLD='\033[1m'
 
@@ -56,21 +56,21 @@ IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null |
 #========================#
 
 echo ""
-echo "                     ..'          ${BOLD}${RED}┌──────────── System ────────────┐${NC}"
-echo "                 ,xNMM.           ${RED}│${NC} User:     $USER_INFO"
-echo "               .OMMMMo            ${RED}│${NC} OS:       $OS"
-echo "               lMM\"               ${RED}│${NC} Kernel:   $KERNEL"
-echo "     .;loddo:.  .olloddol;.       ${RED}│${NC} Uptime:   $UPTIME"
-echo "   cKMMMMMMMMMMNWMMMMMMMMMM0:     ${RED}│${NC} Packages: ${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)"
-echo " .KMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${RED}└────────────────────────────────┘${NC}"
-echo " XMMMMMMMMMMMMMMMMMMMMMMMX.       ${BOLD}${RED}┌─────────── Hardware ───────────┐${NC}"
-echo ";MMMMMMMMMMMMMMMMMMMMMMMM:        ${RED}│${NC} CPU:      $CPU"
-echo ":MMMMMMMMMMMMMMMMMMMMMMMM:        ${RED}│${NC} RAM:      $MEMORY"
-echo ".MMMMMMMMMMMMMMMMMMMMMMMX.        ${RED}│${NC} Disk:     $DISK"
-echo " kMMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${RED}└────────────────────────────────┘${NC}"
-echo " 'XMMMMMMMMMMMMMMMMMMMMMMMMMMk    ${BOLD}${RED}┌─────────── Network ────────────┐${NC}"
-echo "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.    ${RED}│${NC} IP:       $IP"
-echo "    kMMMMMMMMMMMMMMMMMMMMMMd      ${BOLD}${RED}└────────────────────────────────┘${NC}"
+echo "                     ..'          ${BOLD}${ACCENT}┌──────────── System ────────────┐${NC}"
+echo "                 ,xNMM.           ${ACCENT}│${NC} User:     $USER_INFO"
+echo "               .OMMMMo            ${ACCENT}│${NC} OS:       $OS"
+echo "               lMM\"               ${ACCENT}│${NC} Kernel:   $KERNEL"
+echo "     .;loddo:.  .olloddol;.       ${ACCENT}│${NC} Uptime:   $UPTIME"
+echo "   cKMMMMMMMMMMNWMMMMMMMMMM0:     ${ACCENT}│${NC} Packages: ${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)"
+echo " .KMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
+echo " XMMMMMMMMMMMMMMMMMMMMMMMX.       ${BOLD}${ACCENT}┌─────────── Hardware ───────────┐${NC}"
+echo ";MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} CPU:      $CPU"
+echo ":MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} RAM:      $MEMORY"
+echo ".MMMMMMMMMMMMMMMMMMMMMMMX.        ${ACCENT}│${NC} Disk:     $DISK"
+echo " kMMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
+echo " 'XMMMMMMMMMMMMMMMMMMMMMMMMMMk    ${BOLD}${ACCENT}┌─────────── Network ────────────┐${NC}"
+echo "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.    ${ACCENT}│${NC} IP:       $IP"
+echo "    kMMMMMMMMMMMMMMMMMMMMMMd      ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
 echo "     ;KMMMMMMMWXXWMMMMMMMk.       "
 echo "       \"cooc*\"    \"*coo'\"         "
 echo ""
