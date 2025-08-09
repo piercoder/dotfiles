@@ -4,19 +4,20 @@
 # Options:
 #   -n, --no-color   Disable ANSI colors (or set NO_COLOR)
 #   -p, --plain      Plain key=value output, no ASCII art
-#   -s, --short      Fast plain output; skips brew counts
-#   -j, --json       JSON output
-#   -h, --help       Show usage
-#   -v, --version    Show version
+#   -s, --short      Fast plain output; implies --plain and skips brew counts
+#   -j, --json       Emit JSON with stable keys
+#   -h, --help       Show usage and exit
+#   -v, --version    Show script version and exit
 #
-# Notes on changes vs original:
-# - Adds JSON output (-j/--json) with stable keys.
-# - Shows CPU arch (arm64/x86_64) and keeps Rosetta hint if the shell is translated.
-# - Memory accounting: "used" excludes speculative pages; compressor shown separately.
-# - IPv6: prefer a global temporary address when present; treats ::1 as unavailable.
-# - Colors: auto-enable only on TTYs with >=256 colors or COLORTERM=truecolor.
-# - Network parsing, route/ifconfig also forced to LC_ALL=C.
-# - Brew counts keep the original approach; provide quick directory-count fallback.
+# Differences vs. the original version:
+# - Adds JSON output (-j/--json) with predictable, stable field names.
+# - Reports CPU architecture (arm64/x86_64) and appends "(Rosetta)" when the shell
+#   is running translated via Rosetta (sysctl.proc_translated=1).
+# - Memory usage: "used" excludes speculative pages; compressor size reported separately.
+# - IPv6 selection prefers a temporary global address when available; treats ::1 as unavailable.
+# - Color is auto-enabled only on TTYs with >=256 colors or when COLORTERM=truecolor.
+# - Network parsing forces LC_ALL=C for predictable output from route/ifconfig.
+# - Homebrew counts keep the original approach with a fast directory-count fallback.
 
 set -eu
 umask 022
@@ -28,24 +29,25 @@ SCRIPT_VERSION="1.1.0"
 #========================#
 #    Helpers (UPPERCASE)
 #========================#
-# Bytes -> GiB with 1 decimal
+
+# Convert bytes to GiB with one decimal place.
 TO_GIB() { awk -v b="$1" 'BEGIN{printf("%.1f", b/1073741824)}'; }
 
-# Print aligned key=value with dynamic key width
+# Print aligned "key=value" with a dynamic key width.
 PRINT_KV() {
   key=$1; val=$2; width=$3
   printf "%-*s=%s\n" "$width" "$key" "$val"
 }
 
-# Simple JSON escaper (for string values)
+# Escape a string for JSON context (basic subset: quotes, backslashes, tabs, CR/LF).
 JSON_ESC() {
   s=$1
   s=$(printf %s "$s" | sed 's/\\/\\\\/g; s/\"/\\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\n/\\n/g')
   printf %s "$s"
 }
 
-# Shorten IPv6 JUST for the ASCII box to a fixed max length (15 chars).
-# Keeps a central ellipsis and strips any scope (e.g., %en0).
+# Shorten IPv6 specifically for the ASCII box: fixed max length (15 chars),
+# central ellipsis, and strip any scope (e.g., "%en0"). Keeps full value in plain/JSON.
 SHORTEN_IPV6_BOX() {
   s=$1
   [ -z "$s" ] && { printf %s ""; return; }
@@ -75,7 +77,7 @@ for arg in "$@"; do
     -s|--short)    SHORT=1; PLAIN=1 ;;
     -j|--json)     JSON=1; PLAIN=1 ;;
     -h|--help)
-      printf 'Usage: %s [--no-color|-n] [--plain|-p] [--short|-s] [--json|-j]\n' "${0##*/}"
+      printf 'Usage: %s [--no-color|-n] [--plain|-p] [--short|-s] [--json|-j] [--version|-v]\n' "${0##*/}"
       exit 0
       ;;
     -v|--version)
@@ -88,6 +90,8 @@ done
 #========================#
 #      Color gating
 #========================#
+# Enable color only when: stdout is a TTY, NO_COLOR is unset, color not disabled,
+# and output mode is not plain. Require truecolor or >=256-color support.
 colors_ok=0
 if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ] && [ "$COLOR" -eq 1 ] && [ "$PLAIN" -eq 0 ]; then
   if [ "${COLORTERM:-}" = "truecolor" ]; then
@@ -117,6 +121,7 @@ fi
 #========================#
 #      macOS check
 #========================#
+# Exit early on non-Darwin systems to avoid calling macOS tools.
 [ "$(uname -s 2>/dev/null || echo unknown)" = "Darwin" ] || {
   printf '%s\n' "This script is intended for macOS (Darwin). Exiting." >&2
   exit 1
@@ -132,10 +137,11 @@ OS="$OS_NAME $OS_VER"
 KERNEL="$(uname -sr)"
 ARCH=$(uname -m 2>/dev/null || echo "?")
 
-# Force LC_ALL=C on parsed commands (defensive)
+# Force LC_ALL=C on parsed commands for stable parsing.
 if LC_ALL=C uptime -p >/dev/null 2>&1; then
   UPTIME=$(LC_ALL=C uptime -p | sed 's/^up //')
 else
+  # Fallback for older macOS: strip everything except the "up ..." chunk.
   UPTIME=$(LC_ALL=C uptime | sed 's/^.*up *//; s/,.*//' | tr -s ' ')
 fi
 
@@ -150,10 +156,14 @@ ROSETTA=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
 [ "$ROSETTA" = "1" ] && CPU_BRAND="$CPU_BRAND (Rosetta)"
 CPU="$CPU_BRAND (${CPU_PHYSICAL}c/${CPU_LOGICAL}t, $ARCH)"
 
-# Memory via hw.pagesize and vm_stat counters
+#========================#
+#      Memory (vm_stat)
+#========================#
+# Use hw.pagesize and vm_stat counters.
+# "Used" excludes speculative pages; the compressor is shown separately.
 PAGE_SIZE=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
 VM_OUT=$(LC_ALL=C vm_stat 2>/dev/null || true)
-# Parse vm_stat with tolerant patterns and take the last numeric field on each line.
+# Parse vm_stat with tolerant patterns; read the final numeric field on each line.
 set -- $(printf '%s\n' "$VM_OUT" | awk '
   /Pages active/            {gsub(/\./,""); a=$NF+0}
   /Pages wired/             {gsub(/\./,""); w=$NF+0}
@@ -164,20 +174,20 @@ set -- $(printf '%s\n' "$VM_OUT" | awk '
 ACTIVE=${1:-0} WIRED=${2:-0} SPEC=${3:-0} COMPRESS=${4:-0}
 
 TOTAL_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
-# Memory used excludes speculative pages. Compressor reported separately.
-USED_BYTES=$(( (ACTIVE + WIRED) * PAGE_SIZE ))
-COMPRESS_BYTES=$(( COMPRESS * PAGE_SIZE ))
+USED_BYTES=$(( (ACTIVE + WIRED) * PAGE_SIZE ))     # exclude speculative
+COMPRESS_BYTES=$(( COMPRESS * PAGE_SIZE ))         # compressed store size
 MEM_USED_GIB=$(TO_GIB "$USED_BYTES")
 MEM_TOTAL_GIB=$(TO_GIB "$TOTAL_BYTES")
 MEM_PCT=$(awk -v u="$USED_BYTES" -v t="$TOTAL_BYTES" 'BEGIN{printf("%.0f", (t?u*100/t:0))}')
 MEMORY="${MEM_USED_GIB} / ${MEM_TOTAL_GIB} GiB (${MEM_PCT}%)  [cmp: $(TO_GIB "$COMPRESS_BYTES") GiB]"
 
-# Variante corta per la scatola ASCII (niente compressor, niente decimali)
+# Shorter variant for the ASCII box (no compressor, integers only).
 MEMORY_BOX="${MEM_USED_GIB%.*} / ${MEM_TOTAL_GIB%.*} GiB (${MEM_PCT}%)"
 
 #========================#
 #      Disk usage
 #========================#
+# Prefer the Data volume on APFS; fall back to root if not present.
 TARGET="/System/Volumes/Data"; [ -d "$TARGET" ] || TARGET="/"
 read -r DISK_USED_KB DISK_TOTAL_KB DISK_PERC <<EOF
 $(LC_ALL=C df -kP "$TARGET" | awk 'NR==2{print $3, $2, $5}')
@@ -188,9 +198,10 @@ DISK_VALUE=$(awk -v u="$DISK_USED_KB" -v t="$DISK_TOTAL_KB" -v p="$DISK_PERC" \
 #========================#
 #     Packages (brew)
 #========================#
+# When not in --short mode and brew exists, estimate counts cheaply by listing
+# directories in the Cellar/Caskroom; fall back to "brew list" if unavailable.
 BREW_PACKAGES=0 CASK_PACKAGES=0
 if [ "$SHORT" -eq 0 ] && command -v brew >/dev/null 2>&1; then
-  # Fast directory-count fallback first; if it fails, fall back to brew list
   CELLAR=$(brew --cellar 2>/dev/null || echo "")
   CASKROOM=$(brew --caskroom 2>/dev/null || echo "")
   if [ -n "$CELLAR" ] && [ -d "$CELLAR" ]; then
@@ -206,8 +217,9 @@ if [ "$SHORT" -eq 0 ] && command -v brew >/dev/null 2>&1; then
 fi
 
 #========================#
-#     Network Info (IPv4 + IPv6)
+#     Network Info
 #========================#
+# Determine the active interface from the default route. Fallback to common Wi-Fi interfaces.
 IFACE=$(LC_ALL=C route -n get default 2>/dev/null | awk '/interface:/{print $2}')
 [ -n "${IFACE:-}" ] || IFACE=$( (ipconfig getifaddr en0 >/dev/null 2>&1 && echo en0) || \
                                  (ipconfig getifaddr en1 >/dev/null 2>&1 && echo en1) || echo "")
@@ -219,11 +231,10 @@ else
 fi
 [ -n "${IP4:-}" ] || IP4="Unavailable"
 
-# IPv6 selection: prefer temporary global; else first global; exclude link-local and ::1
+# IPv6: prefer temporary global; otherwise first global. Exclude link-local and ::1.
 IP6="Unavailable"
 if [ -n "$IFACE" ]; then
   if LC_ALL=C ifconfig "$IFACE" >/dev/null 2>&1; then
-    # try temporary first
     IP6_TMP=$(LC_ALL=C ifconfig "$IFACE" 2>/dev/null | awk '/inet6 / && /temporary/ {print $2}' | awk '!/^fe80:/ && !/%/')
     if [ -n "${IP6_TMP:-}" ]; then
       IP6=$(printf '%s\n' "$IP6_TMP" | awk 'NR==1{print; exit}')
@@ -239,10 +250,10 @@ fi
 IP6_BOX=$(SHORTEN_IPV6_BOX "$IP6")
 
 #========================#
-#       Output
+#       Output modes
 #========================#
 if [ "$JSON" -eq 1 ]; then
-  # JSON object (mostly strings; numeric fields kept numeric)
+  # Emit a single-line JSON object (mostly strings; sizes are numeric).
   printf '{'
   printf '"version":"%s"' "$(JSON_ESC "$SCRIPT_VERSION")"
   printf ',"user":"%s"'   "$(JSON_ESC "$USER_INFO")"
@@ -269,7 +280,7 @@ if [ "$JSON" -eq 1 ]; then
 fi
 
 if [ "$PLAIN" -eq 1 ]; then
-  # compute max key width for alignment
+  # Plain key=value output. Compute max key width for neat alignment.
   KEY_WIDTH=0
   if [ "$SHORT" -eq 1 ]; then
     for k in user os kernel uptime cpu ram disk ip4 ip6; do
@@ -303,7 +314,9 @@ if [ "$PLAIN" -eq 1 ]; then
   exit 0
 fi
 
-# ASCII art
+#========================#
+#   ASCII art (colored)
+#========================#
 printf "\n"
 printf "                     %s..'%s          %s%s┌──────────── System ────────────┐%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 printf "                 %s,xNMM.%s           %s│%s %sUser:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$USER_INFO"
