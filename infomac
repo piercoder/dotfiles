@@ -23,7 +23,7 @@ umask 022
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin
 LC_ALL=C
 
-SCRIPT_VERSION=“1.1.0”
+SCRIPT_VERSION="1.1.0"
 
 #========================#
 #    Helpers (UPPERCASE)
@@ -172,6 +172,9 @@ MEM_TOTAL_GIB=$(TO_GIB "$TOTAL_BYTES")
 MEM_PCT=$(awk -v u="$USED_BYTES" -v t="$TOTAL_BYTES" 'BEGIN{printf("%.0f", (t?u*100/t:0))}')
 MEMORY="${MEM_USED_GIB} / ${MEM_TOTAL_GIB} GiB (${MEM_PCT}%)  [cmp: $(TO_GIB "$COMPRESS_BYTES") GiB]"
 
+# Variante corta per la scatola ASCII (niente compressor, niente decimali)
+MEMORY_BOX="${MEM_USED_GIB%.*} / ${MEM_TOTAL_GIB%.*} GiB (${MEM_PCT}%)"
+
 #========================#
 #      Disk usage
 #========================#
@@ -312,7 +315,7 @@ printf " .%sKMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└─────────
 
 printf " %sXMMMMMMMMMMMMMMMMMMMMMMMX.%s       %s%s┌─────────── Hardware ───────────┐%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 printf "%s;MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sCPU:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$CPU"
-printf "%s:MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sRAM:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$MEMORY"
+printf "%s:MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sRAM:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$MEMORY_BOX"
 printf "%s.MMMMMMMMMMMMMMMMMMMMMMMX.%s        %s│%s %sDisk:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$DISK_VALUE"
 printf " %skMMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└────────────────────────────────┘%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 
