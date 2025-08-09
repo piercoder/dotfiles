@@ -3,7 +3,8 @@
 #========================#
 #      Colors
 #========================#
-ACCENT='\033[38;2;10;132;255m'
+ACCENT='\033[38;2;28;152;232m'     # #1c98e8
+LABEL='\033[38;2;241;211;43m'      # #f1d32b
 NC='\033[0m'
 BOLD='\033[1m'
 
@@ -57,19 +58,19 @@ IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null |
 
 echo ""
 echo "                     ..'          ${BOLD}${ACCENT}┌──────────── System ────────────┐${NC}"
-echo "                 ,xNMM.           ${ACCENT}│${NC} User:     $USER_INFO"
-echo "               .OMMMMo            ${ACCENT}│${NC} OS:       $OS"
-echo "               lMM\"               ${ACCENT}│${NC} Kernel:   $KERNEL"
-echo "     .;loddo:.  .olloddol;.       ${ACCENT}│${NC} Uptime:   $UPTIME"
-echo "   cKMMMMMMMMMMNWMMMMMMMMMM0:     ${ACCENT}│${NC} Packages: ${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)"
+echo "                 ,xNMM.           ${ACCENT}│${NC} ${LABEL}${BOLD}User:${NC}     ${ACCENT}$USER_INFO${NC}"
+echo "               .OMMMMo            ${ACCENT}│${NC} ${LABEL}${BOLD}OS:${NC}       ${ACCENT}$OS${NC}"
+echo "               lMM\"               ${ACCENT}│${NC} ${LABEL}${BOLD}Kernel:${NC}   ${ACCENT}$KERNEL${NC}"
+echo "     .;loddo:.  .olloddol;.       ${ACCENT}│${NC} ${LABEL}${BOLD}Uptime:${NC}   ${ACCENT}$UPTIME${NC}"
+echo "   cKMMMMMMMMMMNWMMMMMMMMMM0:     ${ACCENT}│${NC} ${LABEL}${BOLD}Packages:${NC} ${ACCENT}${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)${NC}"
 echo " .KMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
 echo " XMMMMMMMMMMMMMMMMMMMMMMMX.       ${BOLD}${ACCENT}┌─────────── Hardware ───────────┐${NC}"
-echo ";MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} CPU:      $CPU"
-echo ":MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} RAM:      $MEMORY"
-echo ".MMMMMMMMMMMMMMMMMMMMMMMX.        ${ACCENT}│${NC} Disk:     $DISK"
+echo ";MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} ${LABEL}${BOLD}CPU:${NC}      ${ACCENT}$CPU${NC}"
+echo ":MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} ${LABEL}${BOLD}RAM:${NC}      ${ACCENT}$MEMORY${NC}"
+echo ".MMMMMMMMMMMMMMMMMMMMMMMX.        ${ACCENT}│${NC} ${LABEL}${BOLD}Disk:${NC}     ${ACCENT}$DISK${NC}"
 echo " kMMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
 echo " 'XMMMMMMMMMMMMMMMMMMMMMMMMMMk    ${BOLD}${ACCENT}┌─────────── Network ────────────┐${NC}"
-echo "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.    ${ACCENT}│${NC} IP:       $IP"
+echo "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.    ${ACCENT}│${NC} ${LABEL}${BOLD}IP:${NC}       ${ACCENT}$IP${NC}"
 echo "    kMMMMMMMMMMMMMMMMMMMMMMd      ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
 echo "     ;KMMMMMMMWXXWMMMMMMMk.       "
 echo "       \"cooc*\"    \"*coo'\"         "
