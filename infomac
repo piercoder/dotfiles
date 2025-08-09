@@ -3,8 +3,10 @@
 #========================#
 #      Colors
 #========================#
-ACCENT='\033[38;2;28;152;232m'     # #1c98e8
-LABEL='\033[38;2;241;211;43m'      # #f1d32b
+ACCENT1='\033[38;2;232;51;28m'      # rosso #e8331c
+ACCENT2='\033[38;2;104;193;86m'     # verde #68c156
+ACCENT3='\033[38;2;241;211;43m'     # giallo #f1d32b
+ACCENT4='\033[38;2;28;152;232m'     # blu #1c98e8
 NC='\033[0m'
 BOLD='\033[1m'
 
@@ -57,21 +59,21 @@ IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null |
 #========================#
 
 echo ""
-echo "                     ..'          ${BOLD}${ACCENT}┌──────────── System ────────────┐${NC}"
-echo "                 ,xNMM.           ${ACCENT}│${NC} ${LABEL}${BOLD}User:${NC}     ${ACCENT}$USER_INFO${NC}"
-echo "               .OMMMMo            ${ACCENT}│${NC} ${LABEL}${BOLD}OS:${NC}       ${ACCENT}$OS${NC}"
-echo "               lMM\"               ${ACCENT}│${NC} ${LABEL}${BOLD}Kernel:${NC}   ${ACCENT}$KERNEL${NC}"
-echo "     .;loddo:.  .olloddol;.       ${ACCENT}│${NC} ${LABEL}${BOLD}Uptime:${NC}   ${ACCENT}$UPTIME${NC}"
-echo "   cKMMMMMMMMMMNWMMMMMMMMMM0:     ${ACCENT}│${NC} ${LABEL}${BOLD}Packages:${NC} ${ACCENT}${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)${NC}"
-echo " .KMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
-echo " XMMMMMMMMMMMMMMMMMMMMMMMX.       ${BOLD}${ACCENT}┌─────────── Hardware ───────────┐${NC}"
-echo ";MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} ${LABEL}${BOLD}CPU:${NC}      ${ACCENT}$CPU${NC}"
-echo ":MMMMMMMMMMMMMMMMMMMMMMMM:        ${ACCENT}│${NC} ${LABEL}${BOLD}RAM:${NC}      ${ACCENT}$MEMORY${NC}"
-echo ".MMMMMMMMMMMMMMMMMMMMMMMX.        ${ACCENT}│${NC} ${LABEL}${BOLD}Disk:${NC}     ${ACCENT}$DISK${NC}"
-echo " kMMMMMMMMMMMMMMMMMMMMMMMMWd.     ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
-echo " 'XMMMMMMMMMMMMMMMMMMMMMMMMMMk    ${BOLD}${ACCENT}┌─────────── Network ────────────┐${NC}"
-echo "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.    ${ACCENT}│${NC} ${LABEL}${BOLD}IP:${NC}       ${ACCENT}$IP${NC}"
-echo "    kMMMMMMMMMMMMMMMMMMMMMMd      ${BOLD}${ACCENT}└────────────────────────────────┘${NC}"
-echo "     ;KMMMMMMMWXXWMMMMMMMk.       "
-echo "       \"cooc*\"    \"*coo'\"         "
+echo "                     ${ACCENT4}..'${NC}          ${BOLD}${ACCENT4}┌──────────── System ────────────┐${NC}"
+echo "                 ${ACCENT4},xNMM.${NC}           ${ACCENT4}│${BOLD}${ACCENT1} User:${NC} $USER_INFO"
+echo "               ${ACCENT4}.OMMMMo${NC}            ${ACCENT4}│${BOLD}${ACCENT1} OS:${NC} $OS"
+echo "               ${ACCENT4}lMM\"${NC}               ${ACCENT4}│${BOLD}${ACCENT1} Kernel:${NC} $KERNEL"
+echo "     ${ACCENT4}.;loddo:.  .olloddol;.${NC}       ${ACCENT4}│${BOLD}${ACCENT1} Uptime:${NC} $UPTIME"
+echo "   ${ACCENT4}cKMMMMMMMMMMNWMMMMMMMMMM0:${NC}     ${ACCENT4}│${BOLD}${ACCENT1} Packages:${NC} ${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)"
+echo " .${ACCENT4}KMMMMMMMMMMMMMMMMMMMMMMMWd.${NC}     ${BOLD}${ACCENT4}└────────────────────────────────┘${NC}"
+echo " ${ACCENT4}XMMMMMMMMMMMMMMMMMMMMMMMX.${NC}       ${BOLD}${ACCENT4}┌─────────── Hardware ───────────┐${NC}"
+echo "${ACCENT4};MMMMMMMMMMMMMMMMMMMMMMMM:${NC}        ${ACCENT4}│${BOLD}${ACCENT2} CPU:${NC} $CPU"
+echo "${ACCENT4}:MMMMMMMMMMMMMMMMMMMMMMMM:${NC}        ${ACCENT4}│${BOLD}${ACCENT2} RAM:${NC} $MEMORY"
+echo "${ACCENT4}.MMMMMMMMMMMMMMMMMMMMMMMX.${NC}        ${ACCENT4}│${BOLD}${ACCENT2} Disk:${NC} $DISK"
+echo " ${ACCENT4}kMMMMMMMMMMMMMMMMMMMMMMMMWd.${NC}     ${BOLD}${ACCENT4}└────────────────────────────────┘${NC}"
+echo " ${ACCENT4}'XMMMMMMMMMMMMMMMMMMMMMMMMMMk${NC}    ${BOLD}${ACCENT4}┌─────────── Network ────────────┐${NC}"
+echo "  ${ACCENT4}'XMMMMMMMMMMMMMMMMMMMMMMMMK.${NC}    ${ACCENT4}│${BOLD}${ACCENT3} IP:${NC} $IP"
+echo "    ${ACCENT4}kMMMMMMMMMMMMMMMMMMMMMMd${NC}      ${BOLD}${ACCENT4}└────────────────────────────────┘${NC}"
+echo "     ${ACCENT4};KMMMMMMMWXXWMMMMMMMk.${NC}       "
+echo "       ${ACCENT4}\"cooc*\"    \"*coo'\"${NC}         "
 echo ""
