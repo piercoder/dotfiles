@@ -1,21 +1,29 @@
 #!/bin/sh
-# POSIX-only macOS system info
+# POSIX-only macOS system info (enhanced)
 #
 # Options:
 #   -n, --no-color   Disable ANSI colors (or set NO_COLOR)
 #   -p, --plain      Plain key=value output, no ASCII art
 #   -s, --short      Fast plain output; skips brew counts
+#   -j, --json       JSON output
 #   -h, --help       Show usage
+#   -v, --version    Show version
 #
-# Notes on changes:
-# - Memory accounting now excludes "speculative" pages, which are reclaimable.
-# - vm_stat parsing for "wired" is more tolerant: it matches "Pages wired*"
-#   and takes the last numeric field on the line to handle wording variations.
+# Notes on changes vs original:
+# - Adds JSON output (-j/--json) with stable keys.
+# - Shows CPU arch (arm64/x86_64) and keeps Rosetta hint if the shell is translated.
+# - Memory accounting: "used" excludes speculative pages; compressor shown separately.
+# - IPv6: prefer a global temporary address when present; treats ::1 as unavailable.
+# - Colors: auto-enable only on TTYs with >=256 colors or COLORTERM=truecolor.
+# - Network parsing, route/ifconfig also forced to LC_ALL=C.
+# - Brew counts keep the original approach; provide quick directory-count fallback.
 
 set -eu
 umask 022
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin
 LC_ALL=C
+
+SCRIPT_VERSION=“1.1.0”
 
 #========================#
 #    Helpers (UPPERCASE)
@@ -27,6 +35,13 @@ TO_GIB() { awk -v b="$1" 'BEGIN{printf("%.1f", b/1073741824)}'; }
 PRINT_KV() {
   key=$1; val=$2; width=$3
   printf "%-*s=%s\n" "$width" "$key" "$val"
+}
+
+# Simple JSON escaper (for string values)
+JSON_ESC() {
+  s=$1
+  s=$(printf %s "$s" | sed 's/\\/\\\\/g; s/\"/\\\"/g; s/\t/\\t/g; s/\r/\\r/g; s/\n/\\n/g')
+  printf %s "$s"
 }
 
 # Shorten IPv6 JUST for the ASCII box to a fixed max length (15 chars).
@@ -52,23 +67,41 @@ SHORTEN_IPV6_BOX() {
 #========================#
 #        Args
 #========================#
-COLOR=1 PLAIN=0 SHORT=0
+COLOR=1 PLAIN=0 SHORT=0 JSON=0
 for arg in "$@"; do
   case "$arg" in
     -n|--no-color) COLOR=0 ;;
     -p|--plain)    PLAIN=1 ;;
     -s|--short)    SHORT=1; PLAIN=1 ;;
+    -j|--json)     JSON=1; PLAIN=1 ;;
     -h|--help)
-      printf 'Usage: %s [--no-color|-n] [--plain|-p] [--short|-s]\n' "${0##*/}"
+      printf 'Usage: %s [--no-color|-n] [--plain|-p] [--short|-s] [--json|-j]\n' "${0##*/}"
+      exit 0
+      ;;
+    -v|--version)
+      printf '%s\n' "$SCRIPT_VERSION"
       exit 0
       ;;
   esac
 done
 
 #========================#
-#        Colors
+#      Color gating
 #========================#
+colors_ok=0
 if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ] && [ "$COLOR" -eq 1 ] && [ "$PLAIN" -eq 0 ]; then
+  if [ "${COLORTERM:-}" = "truecolor" ]; then
+    colors_ok=1
+  else
+    if command -v tput >/dev/null 2>&1; then
+      if [ "$(tput colors 2>/dev/null || echo 0)" -ge 256 ]; then
+        colors_ok=1
+      fi
+    fi
+  fi
+fi
+
+if [ "$colors_ok" -eq 1 ]; then
   ESC=$(printf '\033')
   ACCENT1="${ESC}[38;2;232;51;28m"      # red
   ACCENT2="${ESC}[38;2;104;193;86m"     # green
@@ -97,6 +130,7 @@ OS_NAME=$(sw_vers -productName 2>/dev/null || echo "macOS")
 OS_VER=$(sw_vers -productVersion 2>/dev/null || echo "?")
 OS="$OS_NAME $OS_VER"
 KERNEL="$(uname -sr)"
+ARCH=$(uname -m 2>/dev/null || echo "?")
 
 # Force LC_ALL=C on parsed commands (defensive)
 if LC_ALL=C uptime -p >/dev/null 2>&1; then
@@ -114,13 +148,12 @@ CPU_LOGICAL=$(sysctl -n hw.ncpu 2>/dev/null || echo "?")
 CPU_PHYSICAL=$(sysctl -n hw.physicalcpu 2>/dev/null || echo "?")
 ROSETTA=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
 [ "$ROSETTA" = "1" ] && CPU_BRAND="$CPU_BRAND (Rosetta)"
-CPU="$CPU_BRAND (${CPU_PHYSICAL}c/${CPU_LOGICAL}t)"
+CPU="$CPU_BRAND (${CPU_PHYSICAL}c/${CPU_LOGICAL}t, $ARCH)"
 
 # Memory via hw.pagesize and vm_stat counters
 PAGE_SIZE=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
 VM_OUT=$(LC_ALL=C vm_stat 2>/dev/null || true)
 # Parse vm_stat with tolerant patterns and take the last numeric field on each line.
-# This handles wording variations like "Pages wired down" vs "Pages wired".
 set -- $(printf '%s\n' "$VM_OUT" | awk '
   /Pages active/            {gsub(/\./,""); a=$NF+0}
   /Pages wired/             {gsub(/\./,""); w=$NF+0}
@@ -131,12 +164,13 @@ set -- $(printf '%s\n' "$VM_OUT" | awk '
 ACTIVE=${1:-0} WIRED=${2:-0} SPEC=${3:-0} COMPRESS=${4:-0}
 
 TOTAL_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
-# Memory used excludes "speculative" pages (they are readily reclaimable).
-USED_BYTES=$(( (ACTIVE + WIRED + COMPRESS) * PAGE_SIZE ))
+# Memory used excludes speculative pages. Compressor reported separately.
+USED_BYTES=$(( (ACTIVE + WIRED) * PAGE_SIZE ))
+COMPRESS_BYTES=$(( COMPRESS * PAGE_SIZE ))
 MEM_USED_GIB=$(TO_GIB "$USED_BYTES")
 MEM_TOTAL_GIB=$(TO_GIB "$TOTAL_BYTES")
 MEM_PCT=$(awk -v u="$USED_BYTES" -v t="$TOTAL_BYTES" 'BEGIN{printf("%.0f", (t?u*100/t:0))}')
-MEMORY="${MEM_USED_GIB} / ${MEM_TOTAL_GIB} GiB (${MEM_PCT}%)"
+MEMORY="${MEM_USED_GIB} / ${MEM_TOTAL_GIB} GiB (${MEM_PCT}%)  [cmp: $(TO_GIB "$COMPRESS_BYTES") GiB]"
 
 #========================#
 #      Disk usage
@@ -153,8 +187,19 @@ DISK_VALUE=$(awk -v u="$DISK_USED_KB" -v t="$DISK_TOTAL_KB" -v p="$DISK_PERC" \
 #========================#
 BREW_PACKAGES=0 CASK_PACKAGES=0
 if [ "$SHORT" -eq 0 ] && command -v brew >/dev/null 2>&1; then
-  BREW_PACKAGES=$(brew list -1 2>/dev/null | wc -l | tr -d ' ')
-  CASK_PACKAGES=$(brew list --cask -1 2>/dev/null | wc -l | tr -d ' ')
+  # Fast directory-count fallback first; if it fails, fall back to brew list
+  CELLAR=$(brew --cellar 2>/dev/null || echo "")
+  CASKROOM=$(brew --caskroom 2>/dev/null || echo "")
+  if [ -n "$CELLAR" ] && [ -d "$CELLAR" ]; then
+    BREW_PACKAGES=$(find "$CELLAR" -mindepth 1 -maxdepth 1 -type d -prune 2>/dev/null | wc -l | tr -d ' ')
+  else
+    BREW_PACKAGES=$(brew list -1 2>/dev/null | wc -l | tr -d ' ')
+  fi
+  if [ -n "$CASKROOM" ] && [ -d "$CASKROOM" ]; then
+    CASK_PACKAGES=$(find "$CASKROOM" -mindepth 1 -maxdepth 1 -type d -prune 2>/dev/null | wc -l | tr -d ' ')
+  else
+    CASK_PACKAGES=$(brew list --cask -1 2>/dev/null | wc -l | tr -d ' ')
+  fi
 fi
 
 #========================#
@@ -171,21 +216,55 @@ else
 fi
 [ -n "${IP4:-}" ] || IP4="Unavailable"
 
-# IPv6 (global, non-link-local)
+# IPv6 selection: prefer temporary global; else first global; exclude link-local and ::1
 IP6="Unavailable"
 if [ -n "$IFACE" ]; then
-  IP6_CAND=$(LC_ALL=C ifconfig "$IFACE" 2>/dev/null | awk '/inet6 /{print $2}' | awk '!/^fe80:/ && !/%/')
-  if [ -n "${IP6_CAND:-}" ]; then
-    IP6=$(printf '%s\n' "$IP6_CAND" | awk 'NR==1{print; exit}')
+  if LC_ALL=C ifconfig "$IFACE" >/dev/null 2>&1; then
+    # try temporary first
+    IP6_TMP=$(LC_ALL=C ifconfig "$IFACE" 2>/dev/null | awk '/inet6 / && /temporary/ {print $2}' | awk '!/^fe80:/ && !/%/')
+    if [ -n "${IP6_TMP:-}" ]; then
+      IP6=$(printf '%s\n' "$IP6_TMP" | awk 'NR==1{print; exit}')
+    else
+      IP6_CAND=$(LC_ALL=C ifconfig "$IFACE" 2>/dev/null | awk '/inet6 /{print $2}' | awk '!/^fe80:/ && !/%/')
+      if [ -n "${IP6_CAND:-}" ]; then
+        IP6=$(printf '%s\n' "$IP6_CAND" | awk 'NR==1{print; exit}')
+      fi
+    fi
   fi
 fi
-
-# Prepare IPv6 for ASCII box (fixed max 15 chars). Plain keeps full IP.
+[ "$IP6" = "::1" ] && IP6="Unavailable"
 IP6_BOX=$(SHORTEN_IPV6_BOX "$IP6")
 
 #========================#
 #       Output
 #========================#
+if [ "$JSON" -eq 1 ]; then
+  # JSON object (mostly strings; numeric fields kept numeric)
+  printf '{'
+  printf '"version":"%s"' "$(JSON_ESC "$SCRIPT_VERSION")"
+  printf ',"user":"%s"'   "$(JSON_ESC "$USER_INFO")"
+  printf ',"os_name":"%s","os_version":"%s","os":"%s"' \
+         "$(JSON_ESC "$OS_NAME")" "$(JSON_ESC "$OS_VER")" "$(JSON_ESC "$OS")"
+  printf ',"kernel":"%s","arch":"%s"' "$(JSON_ESC "$KERNEL")" "$(JSON_ESC "$ARCH")"
+  printf ',"cpu_brand":"%s","cpu_physical":%s,"cpu_logical":%s,"rosetta":%s' \
+         "$(JSON_ESC "$CPU_BRAND")" "$(printf %s "$CPU_PHYSICAL")" "$(printf %s "$CPU_LOGICAL")" "$(printf %s "$ROSETTA")"
+  printf ',"cpu":"%s"' "$(JSON_ESC "$CPU")"
+  printf ',"uptime":"%s"' "$(JSON_ESC "$UPTIME")"
+  printf ',"mem_total_bytes":%s,"mem_used_bytes_excl_speculative":%s,"mem_compressor_bytes":%s' \
+         "$(printf %s "$TOTAL_BYTES")" "$(printf %s "$USED_BYTES")" "$(printf %s "$COMPRESS_BYTES")"
+  printf ',"mem_total_gib":"%s","mem_used_gib":"%s","mem_percent":%s' \
+         "$MEM_TOTAL_GIB" "$MEM_USED_GIB" "$MEM_PCT"
+  printf ',"disk_used_kb":%s,"disk_total_kb":%s,"disk_percent":"%s","disk":"%s"' \
+         "$(printf %s "$DISK_USED_KB")" "$(printf %s "$DISK_TOTAL_KB")" "$(JSON_ESC "$DISK_PERC")" "$(JSON_ESC "$DISK_VALUE")"
+  printf ',"brew_packages":%s,"cask_packages":%s' \
+         "$(printf %s "$BREW_PACKAGES")" "$(printf %s "$CASK_PACKAGES")"
+  printf ',"iface":"%s","ip4":"%s","ip6":"%s"' \
+         "$(JSON_ESC "$IFACE")" "$(JSON_ESC "$IP4")" "$(JSON_ESC "$IP6")"
+  printf '}'
+  printf '\n'
+  exit 0
+fi
+
 if [ "$PLAIN" -eq 1 ]; then
   # compute max key width for alignment
   KEY_WIDTH=0
