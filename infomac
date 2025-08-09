@@ -3,12 +3,12 @@
 #========================#
 #      Colors
 #========================#
-ACCENT1='\033[38;2;232;51;28m'      # rosso #e8331c
-ACCENT2='\033[38;2;104;193;86m'     # verde #68c156
-ACCENT3='\033[38;2;241;211;43m'     # giallo #f1d32b
-ACCENT4='\033[38;2;28;152;232m'     # blu #1c98e8
-NC='\033[0m'
-BOLD='\033[1m'
+ACCENT1='\033[38;2;232;51;28m'      # red #e8331c (System labels)
+ACCENT2='\033[38;2;104;193;86m'     # green #68c156 (Hardware labels)
+ACCENT3='\033[38;2;241;211;43m'     # yellow #f1d32b (Network labels)
+ACCENT4='\033[38;2;28;152;232m'     # blue #1c98e8 (borders + logo)
+NC='\033[0m'                        # reset color
+BOLD='\033[1m'                      # bold text
 
 #========================#
 #    System Information
@@ -21,10 +21,12 @@ UPTIME="$(uptime | sed 's/^.*up *//; s/,.*//' | sed 's/  / /g')"
 #========================#
 #     Hardware Info
 #========================#
-CPU_MODEL="$(sysctl -n machdep.cpu.brand_string)"
-CPU_USAGE="$(ps -A -o %cpu | awk 'NR>1 {sum+=$1} END {printf("%.0f", sum)}')"
-CPU="$CPU_MODEL (${CPU_USAGE}%)"
+# CPU model only
+CPU_MODEL="$(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
+[ -z "$CPU_MODEL" ] && CPU_MODEL="$(sysctl -n hw.model 2>/dev/null)"
+CPU="$CPU_MODEL"
 
+# RAM usage (GiB and percentage)
 PAGE_SIZE=$(vm_stat | awk '/page size of/ {print $8}')
 ACTIVE=$(vm_stat | awk '/Pages active/ {gsub(/\./,""); print $3}')
 WIRED=$(vm_stat | awk '/Pages wired down/ {gsub(/\./,""); print $4}')
@@ -35,6 +37,7 @@ USED_GIB=$(echo "scale=1; $USED_MB / 1024" | bc)
 TOTAL_GIB=$(echo "scale=1; $TOTAL_MB / 1024" | bc)
 MEMORY="$(printf "%s / %s GiB (%s%%)" "$USED_GIB" "$TOTAL_GIB" "$RAM_PERC")"
 
+# Disk usage (GiB and percentage)
 DISK_BLOCKS=$(df -k / | awk 'NR==2 {print $3, $2}')
 DISK_USED_KB=$(echo "$DISK_BLOCKS" | awk '{print $1}')
 DISK_TOTAL_KB=$(echo "$DISK_BLOCKS" | awk '{print $2}')
