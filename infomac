@@ -15,30 +15,33 @@ LC_ALL=C
 #========================#
 #    Helpers (UPPERCASE)
 #========================#
+# Bytes -> GiB with 1 decimal
 TO_GIB() { awk -v b="$1" 'BEGIN{printf("%.1f", b/1073741824)}'; }
-
-# Shorten very long IPv6 strings to avoid overlong lines (POSIX-safe, heuristic):
-# e.g. "2001:db8:aaaa:bbbb:cccc:dddd:eeee:ffff" -> "2001:db8:aaaa:bbbb..:eeee:ffff"
-SHORTEN_IPV6() {
-  s=$1
-  [ "$s" = "Unavailable" ] && { printf %s "$s"; return; }
-  # Guard: if short enough, keep as-is
-  len=${#s}
-  if [ "$len" -le 28 ]; then
-    printf %s "$s"
-    return
-  fi
-  # Use awk substr for portability
-  head=$(printf %s "$s" | awk '{print substr($0,1,16)}')
-  tail=$(printf %s "$s" | awk '{print substr($0,length($0)-7,8)}')
-  printf '%s..%s' "$head" "$tail"
-}
 
 # Print aligned key=value with dynamic key width
 PRINT_KV() {
   key=$1; val=$2; width=$3
-  # pad key to WIDTH, then print "=value"
   printf "%-*s=%s\n" "$width" "$key" "$val"
+}
+
+# Shorten IPv6 JUST for the ASCII box to a fixed max length (15 chars).
+# Keeps a central ellipsis and strips any scope (e.g., %en0).
+SHORTEN_IPV6_BOX() {
+  s=$1
+  [ -z "$s" ] && { printf %s ""; return; }
+  [ "$s" = "Unavailable" ] && { printf %s "$s"; return; }
+  s=${s%%\%*}
+  maxlen=15
+  len=$(printf %s "$s" | awk '{print length($0)}')
+  if [ "$len" -le "$maxlen" ]; then
+    printf %s "$s"
+    return
+  fi
+  left=$(( (maxlen - 1) / 2 ))
+  right=$(( maxlen - 1 - left ))
+  lh=$(printf %s "$s" | awk -v n="$left" '{print substr($0,1,n)}')
+  rh=$(printf %s "$s" | awk -v n="$right" -v L="$len" '{print substr($0,L-n+1,n)}')
+  printf '%s…%s' "$lh" "$rh"
 }
 
 #========================#
@@ -66,8 +69,8 @@ if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ] && [ "$COLOR" -eq 1 ] && [ "$PLAIN" -eq 
   ACCENT2="${ESC}[38;2;104;193;86m"     # green
   ACCENT3="${ESC}[38;2;241;211;43m"     # yellow
   ACCENT4="${ESC}[38;2;28;152;232m"     # blue
-  NC="${ESC}[0m"                         # reset
-  BOLD="${ESC}[1m"                       # bold
+  NC="${ESC}[0m"                        # reset
+  BOLD="${ESC}[1m"                      # bold
 else
   ACCENT1=""; ACCENT2=""; ACCENT3=""; ACCENT4=""
   NC=""; BOLD=""
@@ -90,7 +93,7 @@ OS_VER=$(sw_vers -productVersion 2>/dev/null || echo "?")
 OS="$OS_NAME $OS_VER"
 KERNEL="$(uname -sr)"
 
-# Force LC_ALL=C on parsed commands (defensive, even if global is set)
+# Force LC_ALL=C on parsed commands (defensive)
 if LC_ALL=C uptime -p >/dev/null 2>&1; then
   UPTIME=$(LC_ALL=C uptime -p | sed 's/^up //')
 else
@@ -168,13 +171,15 @@ if [ -n "$IFACE" ]; then
     IP6=$(printf '%s\n' "$IP6_CAND" | awk 'NR==1{print; exit}')
   fi
 fi
-IP6_DISP=$(SHORTEN_IPV6 "$IP6")
+
+# Prepare IPv6 for ASCII box (fixed max 15 chars). Plain keeps full IP.
+IP6_BOX=$(SHORTEN_IPV6_BOX "$IP6")
 
 #========================#
 #       Output
 #========================#
 if [ "$PLAIN" -eq 1 ]; then
-  # compute max key width for alignment (point 6)
+  # compute max key width for alignment
   KEY_WIDTH=0
   if [ "$SHORT" -eq 1 ]; then
     for k in user os kernel uptime cpu ram disk ip4 ip6; do
@@ -188,7 +193,7 @@ if [ "$PLAIN" -eq 1 ]; then
     PRINT_KV ram    "$MEMORY"    "$KEY_WIDTH"
     PRINT_KV disk   "$DISK_VALUE" "$KEY_WIDTH"
     PRINT_KV ip4    "$IP4"       "$KEY_WIDTH"
-    PRINT_KV ip6    "$IP6_DISP"  "$KEY_WIDTH"
+    PRINT_KV ip6    "$IP6"       "$KEY_WIDTH"   # full IPv6 in plain/short
   else
     for k in user os kernel uptime brew cask cpu ram disk ip4 ip6; do
       len=${#k}; [ "$len" -gt "$KEY_WIDTH" ] && KEY_WIDTH=$len
@@ -203,7 +208,7 @@ if [ "$PLAIN" -eq 1 ]; then
     PRINT_KV ram    "$MEMORY"        "$KEY_WIDTH"
     PRINT_KV disk   "$DISK_VALUE"    "$KEY_WIDTH"
     PRINT_KV ip4    "$IP4"           "$KEY_WIDTH"
-    PRINT_KV ip6    "$IP6_DISP"      "$KEY_WIDTH"
+    PRINT_KV ip6    "$IP6"           "$KEY_WIDTH"   # full IPv6 in plain
   fi
   exit 0
 fi
@@ -226,7 +231,8 @@ printf " %skMMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└─────────
 
 printf " %s'XMMMMMMMMMMMMMMMMMMMMMMMMMMk%s    %s%s┌─────────── Network ────────────┐%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 printf "  %s'XMMMMMMMMMMMMMMMMMMMMMMMMK.%s    %s│%s %sIPv4:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT3" "$NC" "$IP4"
-printf "    %skMMMMMMMMMMMMMMMMMMMMMMd%s      %s│%s %sIPv6:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT3" "$NC" "$IP6_DISP"
+printf "    %skMMMMMMMMMMMMMMMMMMMMMMd%s      %s│%s %sIPv6:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT3" "$NC" "$IP6_BOX"
 printf "     %s;KMMMMMMMWXXWMMMMMMMk.%s       %s%s└────────────────────────────────┘%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 
 printf "       %s\"cooc*\"    \"*coo'\"%s         \n\n" "$ACCENT4" "$NC"
