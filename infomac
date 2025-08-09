@@ -1,90 +1,182 @@
 #!/bin/sh
+# POSIX-only macOS system info script
+
+# Basic safety (no pipefail in pure POSIX)
+set -eu
 
 #========================#
-#      Colors
+#   Arguments (optional)
 #========================#
-ACCENT1='\033[38;2;232;51;28m'      # red #e8331c (System labels)
-ACCENT2='\033[38;2;104;193;86m'     # green #68c156 (Hardware labels)
-ACCENT3='\033[38;2;241;211;43m'     # yellow #f1d32b (Network labels)
-ACCENT4='\033[38;2;28;152;232m'     # blue #1c98e8 (borders + logo)
-NC='\033[0m'                        # reset color
-BOLD='\033[1m'                      # bold text
+COLOR=1
+PLAIN=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-color) COLOR=0 ;;
+    --plain)    PLAIN=1 ;;
+  esac
+done
+
+#========================#
+#      Colors (POSIX)
+#========================#
+# Enable colors only if stdout is a TTY, NO_COLOR is unset, and COLOR is enabled
+if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ] && [ "$COLOR" -eq 1 ]; then
+  ESC=$(printf '\033')
+  ACCENT1="${ESC}[38;2;232;51;28m"      # red
+  ACCENT2="${ESC}[38;2;104;193;86m"     # green
+  ACCENT3="${ESC}[38;2;241;211;43m"     # yellow
+  ACCENT4="${ESC}[38;2;28;152;232m"     # blue
+  NC="${ESC}[0m"
+  BOLD="${ESC}[1m"
+else
+  ACCENT1=""; ACCENT2=""; ACCENT3=""; ACCENT4=""
+  NC=""; BOLD=""
+fi
+
+#========================#
+#   macOS check
+#========================#
+OS_UNAME=$(uname -s 2>/dev/null || echo unknown)
+if [ "$OS_UNAME" != "Darwin" ]; then
+  printf '%s\n' "This script is intended for macOS (Darwin). Exiting." >&2
+  exit 1
+fi
 
 #========================#
 #    System Information
 #========================#
-USER_INFO="$(whoami)@$(hostname)"
+USER_INFO="$(whoami)@$(hostname -s 2>/dev/null || hostname)"
 OS="$(sw_vers -productName) $(sw_vers -productVersion)"
 KERNEL="$(uname -sr)"
-UPTIME="$(uptime | sed 's/^.*up *//; s/,.*//' | sed 's/  / /g')"
+
+if uptime -p >/dev/null 2>&1; then
+  UPTIME=$(uptime -p | sed 's/^up //')
+else
+  UPTIME=$(uptime | sed 's/^.*up *//; s/,.*//' | tr -s ' ')
+fi
 
 #========================#
 #     Hardware Info
 #========================#
-# CPU model only
-CPU_MODEL="$(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
-[ -z "$CPU_MODEL" ] && CPU_MODEL="$(sysctl -n hw.model 2>/dev/null)"
-CPU="$CPU_MODEL"
+CPU_MODEL=$( (sysctl -n machdep.cpu.brand_string 2>/dev/null || true) | tr -d '\n')
+if [ -z "$CPU_MODEL" ]; then
+  CPU_MODEL=$(sysctl -n hw.model 2>/dev/null || echo "?")
+fi
+CPU_CORES=$(sysctl -n hw.ncpu 2>/dev/null || echo "?")
+CPU="$CPU_MODEL (${CPU_CORES} cores)"
 
-# RAM usage (GiB and percentage)
+# Memory calculation (active + wired + speculative + compressed)
 PAGE_SIZE=$(vm_stat | awk '/page size of/ {print $8}')
-ACTIVE=$(vm_stat | awk '/Pages active/ {gsub(/\./,""); print $3}')
-WIRED=$(vm_stat | awk '/Pages wired down/ {gsub(/\./,""); print $4}')
-USED_MB=$(( (ACTIVE + WIRED) * PAGE_SIZE / 1024 / 1024 ))
-TOTAL_MB=$(( $(sysctl -n hw.memsize) / 1024 / 1024 ))
-RAM_PERC=$(( USED_MB * 100 / TOTAL_MB ))
-USED_GIB=$(echo "scale=1; $USED_MB / 1024" | bc)
-TOTAL_GIB=$(echo "scale=1; $TOTAL_MB / 1024" | bc)
-MEMORY="$(printf "%s / %s GiB (%s%%)" "$USED_GIB" "$TOTAL_GIB" "$RAM_PERC")"
+ACTIVE=0 WIRED=0 SPEC=0 COMPRESS=0
+VM_OUT=$(vm_stat)
+ACTIVE=$(printf '%s\n' "$VM_OUT" | awk '/Pages active/ {gsub(/\./,""); print $3+0}')
+WIRED=$(printf  '%s\n' "$VM_OUT" | awk '/Pages wired down/ {gsub(/\./,""); print $4+0}')
+SPEC=$(printf   '%s\n' "$VM_OUT" | awk '/Pages speculative/ {gsub(/\./,""); print $3+0}')
+COMPRESS=$(printf '%s\n' "$VM_OUT" | awk '/Pages occupied by/ {gsub(/\./,""); print $5+0}')
 
-# Disk usage (GiB and percentage) — prefer the Data volume on APFS
+TOTAL_BYTES=$(sysctl -n hw.memsize)
+USED_BYTES=$(( (ACTIVE + WIRED + SPEC + COMPRESS) * PAGE_SIZE ))
+
+# Inline helper: bytes → GiB (1 decimal)
+BYTES_TO_GIB() {
+  awk 'BEGIN{printf("%.1f", '"$1"'/1024/1024/1024)}'
+}
+MEM_USED_GIB=$(BYTES_TO_GIB "$USED_BYTES")
+MEM_TOTAL_GIB=$(BYTES_TO_GIB "$TOTAL_BYTES")
+MEM_PCT=$(awk 'BEGIN{printf("%.0f", ('"$USED_BYTES"'*100)/'"$TOTAL_BYTES"')}')
+MEMORY="${MEM_USED_GIB} / ${MEM_TOTAL_GIB} GiB (${MEM_PCT}%%)"
+
+#========================#
+#      Disk usage
+#========================#
 TARGET="/"
-[ -d /System/Volumes/Data ] && TARGET="/System/Volumes/Data"
-
-DISK_LINE=$(df -k "$TARGET" | awk 'NR==2')
-DISK_USED_KB=$(echo "$DISK_LINE" | awk '{print $3}')
-DISK_TOTAL_KB=$(echo "$DISK_LINE" | awk '{print $2}')
-DISK_PERC=$(echo "$DISK_LINE" | awk '{print $5}')
-
-DISK_USED_GIB=$(echo "scale=1; $DISK_USED_KB / 1048576" | bc)
-DISK_TOTAL_GIB=$(echo "scale=1; $DISK_TOTAL_KB / 1048576" | bc)
-
-DISK_VALUE="$(printf "%s / %s GiB (%s)" \
-  "$DISK_USED_GIB" "$DISK_TOTAL_GIB" "$DISK_PERC")"
+if [ -d /System/Volumes/Data ]; then
+  TARGET="/System/Volumes/Data"
+fi
+DISK_LINE=$(df -kP "$TARGET" | awk 'NR==2')
+DISK_USED_KB=$(printf '%s\n' "$DISK_LINE" | awk '{print $3}')
+DISK_TOTAL_KB=$(printf '%s\n' "$DISK_LINE" | awk '{print $2}')
+DISK_PERC=$(printf '%s\n' "$DISK_LINE" | awk '{print $5}')
+DISK_VALUE=$(awk 'BEGIN{
+  u='"$DISK_USED_KB"'; t='"$DISK_TOTAL_KB"';
+  printf("%.1f / %.1f GiB (%s)", u/1048576, t/1048576, "'"$DISK_PERC"'")
+}')
 
 #========================#
 #     Packages (brew)
 #========================#
-BREW_PACKAGES=$(brew list 2>/dev/null | wc -l | xargs)
-CASK_PACKAGES=$(brew list --cask 2>/dev/null | wc -l | xargs)
+if command -v brew >/dev/null 2>&1; then
+  BREW_PACKAGES=$(brew list 2>/dev/null | wc -l | tr -d ' ')
+  CASK_PACKAGES=$(brew list --cask 2>/dev/null | wc -l | tr -d ' ')
+else
+  BREW_PACKAGES=0
+  CASK_PACKAGES=0
+fi
 
 #========================#
 #     Network Info
 #========================#
-IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "Unavailable")"
+IFACE=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
+if [ -n "${IFACE:-}" ]; then
+  IP=$(ipconfig getifaddr "$IFACE" 2>/dev/null || echo "Unavailable")
+else
+  IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo "Unavailable")
+fi
 
 #========================#
-#        Output
+#       Output
 #========================#
+if [ "$PLAIN" -eq 1 ]; then
+  printf 'user=%s\nos=%s\nkernel=%s\nuptime=%s\nbrew=%s\ncask=%s\ncpu=%s\nram=%s\ndisk=%s\nip=%s\n' \
+    "$USER_INFO" "$OS" "$KERNEL" "$UPTIME" "$BREW_PACKAGES" "$CASK_PACKAGES" "$CPU" "$MEMORY" "$DISK_VALUE" "$IP"
+  exit 0
+fi
 
-echo ""
-echo "                     ${ACCENT4}..'${NC}          ${BOLD}${ACCENT4}┌──────────── System ────────────┐${NC}"
-echo "                 ${ACCENT4},xNMM.${NC}           ${ACCENT4}│${BOLD}${ACCENT1} User:${NC} $USER_INFO"
-echo "               ${ACCENT4}.OMMMMo${NC}            ${ACCENT4}│${BOLD}${ACCENT1} OS:${NC} $OS"
-echo "               ${ACCENT4}lMM\"${NC}               ${ACCENT4}│${BOLD}${ACCENT1} Kernel:${NC} $KERNEL"
-echo "     ${ACCENT4}.;loddo:.  .olloddol;.${NC}       ${ACCENT4}│${BOLD}${ACCENT1} Uptime:${NC} $UPTIME"
-echo "   ${ACCENT4}cKMMMMMMMMMMNWMMMMMMMMMM0:${NC}     ${ACCENT4}│${BOLD}${ACCENT1} Packages:${NC} ${BREW_PACKAGES} (brew), ${CASK_PACKAGES} (cask)"
-echo " .${ACCENT4}KMMMMMMMMMMMMMMMMMMMMMMMWd.${NC}     ${BOLD}${ACCENT4}└────────────────────────────────┘${NC}"
+printf "\n"
+printf "                     %s..'%s          %s%s┌──────────── System ────────────┐%s\n" \
+  "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 
-echo " ${ACCENT4}XMMMMMMMMMMMMMMMMMMMMMMMX.${NC}       ${BOLD}${ACCENT4}┌─────────── Hardware ───────────┐${NC}"
-echo "${ACCENT4};MMMMMMMMMMMMMMMMMMMMMMMM:${NC}        ${ACCENT4}│${BOLD}${ACCENT2} CPU:${NC} $CPU"
-echo "${ACCENT4}:MMMMMMMMMMMMMMMMMMMMMMMM:${NC}        ${ACCENT4}│${BOLD}${ACCENT2} RAM:${NC} $MEMORY"
-echo "${ACCENT4}.MMMMMMMMMMMMMMMMMMMMMMMX.${NC}        ${ACCENT4}│${BOLD}${ACCENT2} Disk:${NC} $DISK_VALUE"
-echo " ${ACCENT4}kMMMMMMMMMMMMMMMMMMMMMMMMWd.${NC}     ${BOLD}${ACCENT4}└────────────────────────────────┘${NC}"
+printf "                 %s,xNMM.%s           %s│%s %sUser:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$USER_INFO"
 
-echo " ${ACCENT4}'XMMMMMMMMMMMMMMMMMMMMMMMMMMk${NC}    ${BOLD}${ACCENT4}┌─────────── Network ────────────┐${NC}"
-echo "  ${ACCENT4}'XMMMMMMMMMMMMMMMMMMMMMMMMK.${NC}    ${ACCENT4}│${BOLD}${ACCENT3} IP:${NC} $IP"
-echo "    ${ACCENT4}kMMMMMMMMMMMMMMMMMMMMMMd${NC}      ${BOLD}${ACCENT4}└────────────────────────────────┘${NC}"
-echo "     ${ACCENT4};KMMMMMMMWXXWMMMMMMMk.${NC}       "
-echo "       ${ACCENT4}\"cooc*\"    \"*coo'\"${NC}         "
-echo ""
+printf "               %s.OMMMMo%s            %s│%s %sOS:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$OS"
+
+printf "               %slMM\"%s               %s│%s %sKernel:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$KERNEL"
+
+printf "     %s.;loddo:.  .olloddol;.%s       %s│%s %sUptime:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$UPTIME"
+
+printf "   %scKMMMMMMMMMMNWMMMMMMMMMM0:%s     %s│%s %sPackages:%s %s (brew), %s (cask)\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$BREW_PACKAGES" "$CASK_PACKAGES"
+
+printf " .%sKMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└────────────────────────────────┘%s\n" \
+  "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
+
+printf " %sXMMMMMMMMMMMMMMMMMMMMMMMX.%s       %s%s┌─────────── Hardware ───────────┐%s\n" \
+  "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
+
+printf "%s;MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sCPU:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$CPU"
+
+printf "%s:MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sRAM:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$MEMORY"
+
+printf "%s.MMMMMMMMMMMMMMMMMMMMMMMX.%s        %s│%s %sDisk:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$DISK_VALUE"
+
+printf " %skMMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└────────────────────────────────┘%s\n" \
+  "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
+
+printf " %s'XMMMMMMMMMMMMMMMMMMMMMMMMMMk%s    %s%s┌─────────── Network ────────────┐%s\n" \
+  "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
+
+printf "  %s'XMMMMMMMMMMMMMMMMMMMMMMMMK.%s    %s│%s %sIP:%s %s\n" \
+  "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT3" "$NC" "$IP"
+
+printf "    %skMMMMMMMMMMMMMMMMMMMMMMd%s      %s%s└────────────────────────────────┘%s\n" \
+  "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
+
+printf "     %s;KMMMMMMMWXXWMMMMMMMk.%s       \n" "$ACCENT4" "$NC"
+printf "       %s\"cooc*\"    \"*coo'\"%s         \n\n" "$ACCENT4" "$NC"
