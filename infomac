@@ -1,11 +1,27 @@
 #!/bin/sh
-# POSIX-only macOS system info (compact+patched)
+# POSIX-only macOS system info
+#
+# Description:
+#   Lightweight, POSIX-compliant system info script tailored for macOS.
+#   Produces either a colorful ASCII dashboard (default) or a plain key=value
+#   output for scripting/automation.
+#
+# Options:
+#   -n, --no-color   Disable ANSI colors (or set NO_COLOR env var)
+#   -p, --plain      Plain key=value output, no ASCII art
+#   -s, --short      Fast plain output; skips slower bits (e.g., brew counts)
+#   -h, --help       Show usage
+#
+# Notes:
+#   - Uses only POSIX shell builtins + standard macOS tools.
+#   - Locale forced to C to stabilize parsing of command outputs.
+#   - Tries to be resilient to missing commands/fields while keeping code compact.
 
-set -eu
-umask 022
-# PATH "pulito" che copre sia Intel (/usr/local) che Apple Silicon (/opt/homebrew)
+set -eu                      # Exit on error/undefined var; no pipefail in POSIX
+umask 022                    # Sensible default file mode creation mask
+# Clean PATH covering Intel (/usr/local) and Apple Silicon (/opt/homebrew)
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin
-LC_ALL=C
+LC_ALL=C                     # Stable, fast, English-like parsing for awk/sed/etc.
 
 #========================#
 #        Args
@@ -13,9 +29,9 @@ LC_ALL=C
 COLOR=1 PLAIN=0 SHORT=0
 for arg in "$@"; do
   case "$arg" in
-    -n|--no-color) COLOR=0 ;;
-    -p|--plain)    PLAIN=1 ;;
-    -s|--short)    SHORT=1; PLAIN=1 ;;  # short implica plain
+    -n|--no-color) COLOR=0 ;;              # Force-disable colors
+    -p|--plain)    PLAIN=1 ;;              # Plain key=value mode
+    -s|--short)    SHORT=1; PLAIN=1 ;;     # Short implies plain (skip slower steps)
     -h|--help)
       printf 'Usage: %s [--no-color|-n] [--plain|-p] [--short|-s]\n' "${0##*/}"
       exit 0
@@ -26,15 +42,21 @@ done
 #========================#
 #        Colors
 #========================#
+# Enable 24-bit ANSI colors only if:
+# - stdout is a TTY,
+# - NO_COLOR is not set,
+# - colors are not disabled by flag, and
+# - we are not in plain mode
 if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ] && [ "$COLOR" -eq 1 ] && [ "$PLAIN" -eq 0 ]; then
   ESC=$(printf '\033')
   ACCENT1="${ESC}[38;2;232;51;28m"      # red
   ACCENT2="${ESC}[38;2;104;193;86m"     # green
   ACCENT3="${ESC}[38;2;241;211;43m"     # yellow
   ACCENT4="${ESC}[38;2;28;152;232m"     # blue
-  NC="${ESC}[0m"
-  BOLD="${ESC}[1m"
+  NC="${ESC}[0m"                        # reset
+  BOLD="${ESC}[1m"                      # bold
 else
+  # No colors
   ACCENT1=""; ACCENT2=""; ACCENT3=""; ACCENT4=""
   NC=""; BOLD=""
 fi
@@ -42,6 +64,7 @@ fi
 #========================#
 #      macOS check
 #========================#
+# Hard-stop if we are not on Darwin (macOS)
 [ "$(uname -s 2>/dev/null || echo unknown)" = "Darwin" ] || {
   printf '%s\n' "This script is intended for macOS (Darwin). Exiting." >&2
   exit 1
@@ -50,34 +73,47 @@ fi
 #========================#
 #    System Information
 #========================#
+# User and host (short hostname with fallback to full)
 USER_INFO="$(whoami)@$(hostname -s 2>/dev/null || hostname)"
+# OS name/version with safe fallbacks
 OS_NAME=$(sw_vers -productName 2>/dev/null || echo "macOS")
 OS_VER=$(sw_vers -productVersion 2>/dev/null || echo "?")
 OS="$OS_NAME $OS_VER"
+# Kernel string (e.g., "Darwin 24.0.0")
 KERNEL="$(uname -sr)"
 
+# Uptime:
+# - Prefer modern `uptime -p` ("up X days, ..."), strip leading "up "
+# - Fallback parses legacy `uptime` format
 if uptime -p >/dev/null 2>&1; then
   UPTIME=$(uptime -p | sed 's/^up //')
 else
+  # Trim everything up to "up", then cut at first comma; squeeze spaces
   UPTIME=$(uptime | sed 's/^.*up *//; s/,.*//' | tr -s ' ')
 fi
 
 #========================#
 #     Hardware Info
 #========================#
+# CPU brand (Intel/Apple string); fallback to hw.model if unavailable
 CPU_BRAND=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || true)
 [ -n "$CPU_BRAND" ] || CPU_BRAND=$(sysctl -n hw.model 2>/dev/null || echo "?")
+# Logical threads and physical cores
 CPU_LOGICAL=$(sysctl -n hw.ncpu 2>/dev/null || echo "?")
 CPU_PHYSICAL=$(sysctl -n hw.physicalcpu 2>/dev/null || echo "?")
-# Rosetta detection (1 = tradotto)
+# Rosetta detection (1 = process translated)
 ROSETTA=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
 [ "$ROSETTA" = "1" ] && CPU_BRAND="$CPU_BRAND (Rosetta)"
 
+# Final CPU string: "<brand> (<physical>c/<logical>t)"
 CPU="$CPU_BRAND (${CPU_PHYSICAL}c/${CPU_LOGICAL}t)"
 
-# Memoria: page size via hw.pagesize, vm_stat robusto
+# Memory:
+# - Page size from sysctl (more robust than parsing vm_stat header)
+# - Parse vm_stat sums for used-ish memory: active + wired + speculative + compressed
 PAGE_SIZE=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
 VM_OUT=$(vm_stat 2>/dev/null || true)
+# Extract counters in one awk pass; default to 0 if a field is missing
 set -- $(printf '%s\n' "$VM_OUT" | awk '
   /Pages active/            {gsub(/\./,""); a=$3+0}
   /Pages wired down/        {gsub(/\./,""); w=$4+0}
@@ -87,31 +123,40 @@ set -- $(printf '%s\n' "$VM_OUT" | awk '
 ')
 ACTIVE=${1:-0} WIRED=${2:-0} SPEC=${3:-0} COMPRESS=${4:-0}
 
+# Total physical memory in bytes (always present on macOS)
 TOTAL_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
+# Convert page counts to bytes
 USED_BYTES=$(( (ACTIVE + WIRED + SPEC + COMPRESS) * PAGE_SIZE ))
 
+# Helper to format bytes to GiB with 1 decimal
 to_gib() { awk -v b="$1" 'BEGIN{printf("%.1f", b/1073741824)}'; }
 MEM_USED_GIB=$(to_gib "$USED_BYTES")
 MEM_TOTAL_GIB=$(to_gib "$TOTAL_BYTES")
+# Percentage guard against divide-by-zero
 MEM_PCT=$(awk -v u="$USED_BYTES" -v t="$TOTAL_BYTES" 'BEGIN{printf("%.0f", (t?u*100/t:0))}')
+# Final memory string: "X.Y / Z.W GiB (P%)"
 MEMORY="${MEM_USED_GIB} / ${MEM_TOTAL_GIB} GiB (${MEM_PCT}%)"
 
 #========================#
 #      Disk usage
 #========================#
+# On modern macOS, user data lives under /System/Volumes/Data; fall back to /
 TARGET="/System/Volumes/Data"; [ -d "$TARGET" ] || TARGET="/"
+# Pull used/total (KB) and percent with a single df/awk
 read -r DISK_USED_KB DISK_TOTAL_KB DISK_PERC <<EOF
 $(df -kP "$TARGET" | awk 'NR==2{print $3, $2, $5}')
 EOF
+# Format as GiB with percent
 DISK_VALUE=$(awk -v u="$DISK_USED_KB" -v t="$DISK_TOTAL_KB" -v p="$DISK_PERC" \
   'BEGIN{printf("%.1f / %.1f GiB (%s)", u/1048576, t/1048576, p)}')
 
 #========================#
 #     Packages (brew)
 #========================#
+# Skip Homebrew counts in --short (they can be slow on large installations)
 BREW_PACKAGES=0 CASK_PACKAGES=0
 if [ "$SHORT" -eq 0 ] && command -v brew >/dev/null 2>&1; then
-  # -1 per evitare colonne; wc -l basta
+  # Use -1 to print one per line; wc -l is enough to count
   BREW_PACKAGES=$(brew list -1 2>/dev/null | wc -l | tr -d ' ')
   CASK_PACKAGES=$(brew list --cask -1 2>/dev/null | wc -l | tr -d ' ')
 fi
@@ -119,11 +164,11 @@ fi
 #========================#
 #     Network Info (IPv4 + IPv6)
 #========================#
-# interfaccia preferita: default route; fallback en0/en1
+# Prefer interface from default route; otherwise try en0/en1 (common Wi-Fi/Ethernet)
 IFACE=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
 [ -n "${IFACE:-}" ] || IFACE=$( (ipconfig getifaddr en0 >/dev/null 2>&1 && echo en0) || \
                                  (ipconfig getifaddr en1 >/dev/null 2>&1 && echo en1) || echo "")
-# IPv4
+# IPv4 address (or "Unavailable")
 if [ -n "$IFACE" ]; then
   IP4=$(ipconfig getifaddr "$IFACE" 2>/dev/null || true)
 else
@@ -131,12 +176,11 @@ else
 fi
 [ -n "${IP4:-}" ] || IP4="Unavailable"
 
-# IPv6 globale (escludi link-local fe80::/10)
+# Global (non-link-local) IPv6: filter out fe80::/10 and scoped addresses (with %)
 IP6="Unavailable"
 if [ -n "$IFACE" ]; then
-  # ifconfig output stabile con LC_ALL=C
+  # If multiple global IPv6 addresses exist, take the first
   IP6_CAND=$(ifconfig "$IFACE" 2>/dev/null | awk '/inet6 /{print $2}' | awk '!/^fe80:/ && !/%/')
-  # prendi la prima riga se esiste
   if [ -n "${IP6_CAND:-}" ]; then
     IP6=$(printf '%s\n' "$IP6_CAND" | awk 'NR==1{print; exit}')
   fi
@@ -146,7 +190,8 @@ fi
 #       Output
 #========================#
 if [ "$PLAIN" -eq 1 ]; then
-  # In --short saltiamo brew e ascii; qui l’output è sempre key=value
+  # Plain key=value output.
+  # In --short mode we omit brew counts for speed.
   if [ "$SHORT" -eq 1 ]; then
     printf 'user=%s\nos=%s\nkernel=%s\nuptime=%s\ncpu=%s\nram=%s\ndisk=%s\nip4=%s\nip6=%s\n' \
       "$USER_INFO" "$OS" "$KERNEL" "$UPTIME" "$CPU" "$MEMORY" "$DISK_VALUE" "$IP4" "$IP6"
@@ -157,7 +202,8 @@ if [ "$PLAIN" -eq 1 ]; then
   exit 0
 fi
 
-# ASCII art + sezioni (solo se non --plain/--short)
+# ASCII art + sections (only when not in --plain/--short)
+# System section (header/top block)
 printf "\n"
 printf "                     %s..'%s          %s%s┌──────────── System ────────────┐%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 printf "                 %s,xNMM.%s           %s│%s %sUser:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$USER_INFO"
@@ -167,15 +213,22 @@ printf "     %s.;loddo:.  .olloddol;.%s       %s│%s %sUptime:%s %s\n" "$ACCENT
 printf "   %scKMMMMMMMMMMNWMMMMMMMMMM0:%s     %s│%s %sPackages:%s %s (brew), %s (cask)\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT1" "$NC" "$BREW_PACKAGES" "$CASK_PACKAGES"
 printf " .%sKMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└────────────────────────────────┘%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 
+# Hardware section
 printf " %sXMMMMMMMMMMMMMMMMMMMMMMMX.%s       %s%s┌─────────── Hardware ───────────┐%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 printf "%s;MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sCPU:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$CPU"
 printf "%s:MMMMMMMMMMMMMMMMMMMMMMMM:%s        %s│%s %sRAM:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$MEMORY"
 printf "%s.MMMMMMMMMMMMMMMMMMMMMMMX.%s        %s│%s %sDisk:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT2" "$NC" "$DISK_VALUE"
 printf " %skMMMMMMMMMMMMMMMMMMMMMMMMWd.%s     %s%s└────────────────────────────────┘%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 
+# Network section
+# Note:
+#   Layout keeps the ASCII “apple” block height unchanged by printing IPv4 on
+#   the decorative line and IPv6 on the following line that visually belongs to
+#   the same block, avoiding stretching the art horizontally or vertically.
 printf " %s'XMMMMMMMMMMMMMMMMMMMMMMMMMMk%s    %s%s┌─────────── Network ────────────┐%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 printf "  %s'XMMMMMMMMMMMMMMMMMMMMMMMMK.%s    %s│%s %sIPv4:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT3" "$NC" "$IP4"
 printf "    %skMMMMMMMMMMMMMMMMMMMMMMd%s      %s│%s %sIPv6:%s %s\n" "$ACCENT4" "$NC" "$ACCENT4" "$NC" "$BOLD$ACCENT3" "$NC" "$IP6"
 printf "     %s;KMMMMMMMWXXWMMMMMMMk.%s       %s%s└────────────────────────────────┘%s\n" "$ACCENT4" "$NC" "$BOLD" "$ACCENT4" "$NC"
 
+# Footer tail of the ASCII art
 printf "       %s\"cooc*\"    \"*coo'\"%s         \n\n" "$ACCENT4" "$NC"
