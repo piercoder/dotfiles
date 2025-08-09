@@ -27,7 +27,7 @@ LC_ALL=C
 SCRIPT_VERSION="1.1.0"
 
 #========================#
-#    Helpers (UPPERCASE)
+#    Helpers
 #========================#
 
 # Convert bytes to GiB with one decimal place.
