@@ -6,6 +6,11 @@
 #   -p, --plain      Plain key=value output, no ASCII art
 #   -s, --short      Fast plain output; skips brew counts
 #   -h, --help       Show usage
+#
+# Notes on changes:
+# - Memory accounting now excludes "speculative" pages, which are reclaimable.
+# - vm_stat parsing for "wired" is more tolerant: it matches "Pages wired*"
+#   and takes the last numeric field on the line to handle wording variations.
 
 set -eu
 umask 022
@@ -114,17 +119,20 @@ CPU="$CPU_BRAND (${CPU_PHYSICAL}c/${CPU_LOGICAL}t)"
 # Memory via hw.pagesize and vm_stat counters
 PAGE_SIZE=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
 VM_OUT=$(LC_ALL=C vm_stat 2>/dev/null || true)
+# Parse vm_stat with tolerant patterns and take the last numeric field on each line.
+# This handles wording variations like "Pages wired down" vs "Pages wired".
 set -- $(printf '%s\n' "$VM_OUT" | awk '
-  /Pages active/            {gsub(/\./,""); a=$3+0}
-  /Pages wired down/        {gsub(/\./,""); w=$4+0}
-  /Pages speculative/       {gsub(/\./,""); s=$3+0}
-  /Pages occupied by/       {gsub(/\./,""); c=$5+0}
+  /Pages active/            {gsub(/\./,""); a=$NF+0}
+  /Pages wired/             {gsub(/\./,""); w=$NF+0}
+  /Pages speculative/       {gsub(/\./,""); s=$NF+0}
+  /Pages occupied by/       {gsub(/\./,""); c=$NF+0}
   END{print a+0, w+0, s+0, c+0}
 ')
 ACTIVE=${1:-0} WIRED=${2:-0} SPEC=${3:-0} COMPRESS=${4:-0}
 
 TOTAL_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
-USED_BYTES=$(( (ACTIVE + WIRED + SPEC + COMPRESS) * PAGE_SIZE ))
+# Memory used excludes "speculative" pages (they are readily reclaimable).
+USED_BYTES=$(( (ACTIVE + WIRED + COMPRESS) * PAGE_SIZE ))
 MEM_USED_GIB=$(TO_GIB "$USED_BYTES")
 MEM_TOTAL_GIB=$(TO_GIB "$TOTAL_BYTES")
 MEM_PCT=$(awk -v u="$USED_BYTES" -v t="$TOTAL_BYTES" 'BEGIN{printf("%.0f", (t?u*100/t:0))}')
