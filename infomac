@@ -1,23 +1,51 @@
 #!/bin/sh
-# POSIX-only macOS system info (enhanced)
+###############################################################################
+# macos-sysinfo — Enhanced macOS System Information Script
+#
+# Description:
+#   Displays detailed macOS system, hardware, and network information
+#   in multiple output formats: ASCII art (colored), plain text, or JSON.
+#   Includes CPU, RAM, disk, uptime, package counts, and network IP details.
+#
+# Features:
+#   - POSIX-compliant (runs with /bin/sh)
+#   - Colorized ASCII art output for TTYs with >=256 colors
+#   - Plain text key=value mode for easy parsing
+#   - JSON output with stable keys for scripting/automation
+#   - Short mode for fast minimal output
+#   - Detects Rosetta translation on Apple Silicon
+#   - Accurate memory usage (excludes speculative pages)
+#   - IPv6 shortening for display while preserving full value in plain/JSON
+#   - Homebrew package counts with fast directory scan fallback
+#
+# Usage:
+#   ./macos-sysinfo [options]
 #
 # Options:
 #   -n, --no-color   Disable ANSI colors (or set NO_COLOR)
 #   -p, --plain      Plain key=value output, no ASCII art
-#   -s, --short      Fast plain output; implies --plain and skips brew counts
+#   -s, --short      Fast plain output; implies --plain, skips brew counts
 #   -j, --json       Emit JSON with stable keys
 #   -h, --help       Show usage and exit
 #   -v, --version    Show script version and exit
 #
-# Differences vs. the original version:
-# - Adds JSON output (-j/--json) with predictable, stable field names.
-# - Reports CPU architecture (arm64/x86_64) and appends "(Rosetta)" when the shell
-#   is running translated via Rosetta (sysctl.proc_translated=1).
-# - Memory usage: "used" excludes speculative pages; compressor size reported separately.
-# - IPv6 selection prefers a temporary global address when available; treats ::1 as unavailable.
-# - Color is auto-enabled only on TTYs with >=256 colors or when COLORTERM=truecolor.
-# - Network parsing forces LC_ALL=C for predictable output from route/ifconfig.
-# - Homebrew counts keep the original approach with a fast directory-count fallback.
+# Examples:
+#   ./macos-sysinfo            # full color ASCII output (if supported)
+#   ./macos-sysinfo --plain    # plain key=value output
+#   ./macos-sysinfo --json     # JSON output for automation
+#   ./macos-sysinfo --short    # minimal quick output
+#
+# Author:
+#   Pierpaolo Pattitoni — https://github.com/piercoder
+#
+# License:
+#   MIT License — https://opensource.org/licenses/MIT
+#
+# Warning:
+#   This script is read-only: it does not change system settings.
+#   However, it executes system commands that may vary in availability
+#   and output format between macOS versions.
+###############################################################################
 
 set -eu
 umask 022
