@@ -1,6 +1,6 @@
 ###############################################################################
 # zshrc-macos — Lean & Fast Zsh for macOS
-# Author: Pierpaolo Pattitoni (@piercoder) — refined for performance and safety
+# Author: Pierpaolo Pattitoni (@piercoder)
 # License: MIT
 ###############################################################################
 
