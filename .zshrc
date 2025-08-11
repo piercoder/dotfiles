@@ -1,5 +1,5 @@
 ###############################################################################
-# zshrc-macos — Lean & Fast Zsh for macOS (patched)
+# zshrc-macos — Lean & Fast Zsh for macOS
 # Author: Pierpaolo Pattitoni (@piercoder)
 # License: MIT
 ###############################################################################
@@ -19,7 +19,6 @@ setopt interactive_comments    # allow # comments in interactive mode
 setopt pipefail                # fail pipeline if any command fails (zsh-native form)
 setopt magicequalsubst         # expand ~ and vars in VAR=~/path
 setopt auto_pushd pushd_ignore_dups pushd_silent
-# setopt no_flow_control       # (removed; stty -ixon below handles it at TTY level)
 setopt prompt_subst            # allow substitutions in PROMPT / RPROMPT
 setopt RM_STAR_WAIT            # prompt safeguard for `rm *`
 
@@ -37,8 +36,7 @@ setopt hist_expire_dups_first
 setopt hist_verify
 setopt hist_save_no_dups
 setopt hist_find_no_dups
-setopt share_history           # share history across sessions (preference)
-# Ensure history file exists with restricted perms
+setopt share_history           # share history across sessions
 [[ -f $HISTFILE ]] || { umask 077; : >| "$HISTFILE"; }
 chmod 600 "$HISTFILE" 2>/dev/null
 
@@ -61,27 +59,26 @@ zmodload zsh/complist
 
 : ${XDG_CACHE_HOME:=$HOME/Library/Caches}
 ZCOMPDIR="$XDG_CACHE_HOME/zsh"
-mkdir -p "$ZCOMPDIR"
+mkdir -p "$ZCOMPDIR" "$XDG_CACHE_HOME/zsh/cached-completions"
 ZCOMPDUMP="$ZCOMPDIR/zcompdump-${ZSH_VERSION}-${HOST}"
 
-# Weekly compaudit + cached compinit (only fix user-owned paths)
+# Weekly compaudit + cached compinit (safe perms fix)
 (){
   local tsfile="$ZCOMPDIR/.compaudit.timestamp"
   local now=$(date +%s)
   local last=0
   [[ -e $tsfile ]] && last=$(stat -f %m "$tsfile" 2>/dev/null || echo 0)
   if (( now - last >= 604800 )); then
-    # Fix insecure directories reported by compaudit — only if owned by the user
     local d
     for d in ${(f)"$(compaudit 2>/dev/null)"}; do
-      if [[ -O $d ]]; then
-        chmod g-w,o-w "$d" 2>/dev/null
-      fi
-      # Uncomment to log: print -r -- "$d" >> "$ZCOMPDIR/compaudit.log"
+      [[ -O $d ]] || continue
+      [[ -d $d ]] && chmod g-w,o-w "$d" 2>/dev/null
+      [[ -f $d ]] && chmod go-w    "$d" 2>/dev/null
     done
     : >| "$tsfile"
   fi
   compinit -C -d "$ZCOMPDUMP"
+  chmod 600 "$ZCOMPDUMP" 2>/dev/null
 }
 
 # Completion styles
@@ -90,27 +87,27 @@ zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/cached-completions"
 zstyle ':completion:*' menu select
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*:descriptions' format '%F{yellow}%d%f'
-zstyle ':completion:*' list-colors ''
+# Use LS_COLORS/LSCOLORS if available
+if [[ -n $LS_COLORS ]]; then
+  zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+elif [[ -n $LSCOLORS ]]; then
+  zstyle ':completion:*' list-colors ${(s.:.)LSCOLORS}
+fi
 zstyle ':completion:*' matcher-list \
   'm:{a-z}={A-Za-z}' \
   'r:|[._-]=** r:|=**'
-# Notice new commands automatically
 zstyle ':completion:*' rehash yes
-# Tune completers: move _approximate later and cap errors
 zstyle ':completion:*' completer _extensions _complete _ignored _approximate
 zstyle ':completion:*:approximate:*' max-errors '2'
-
-# Keep completions after sudo
 zstyle ':completion:*:sudo:*' command-path \
   /opt/homebrew/sbin /opt/homebrew/bin /usr/local/sbin /usr/local/bin \
-  /usr/sbin /usr/bin /sbin /bin
+  /usr/sbin /usr/bin /sbin /bin ~/.local/bin
 
 # Show dotfiles in completion
 _comp_options+=(globdots)
 
 #-------------------------- Key bindings (terminfo) ---------------------------#
-bindkey -e  # Emacs keymap
-
+bindkey -e
 if [[ -r ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR} ]]; then
   source ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR}
 else
@@ -124,15 +121,16 @@ fi
 [[ -n ${key[End]}    ]] && bindkey "${key[End]}"    end-of-line
 [[ -n ${key[Up]}     ]] && bindkey "${key[Up]}"     up-line-or-search
 [[ -n ${key[Down]}   ]] && bindkey "${key[Down]}"   down-line-or-search
+bindkey '^[[H' beginning-of-line
+bindkey '^[[F' end-of-line
 
-# Disable Ctrl-S / Ctrl-Q terminal freeze at TTY level
 [[ -t 1 ]] && stty -ixon 2>/dev/null
 
 #-------------------------------- Prompt --------------------------------------#
 if command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
 else
-  PROMPT="%B%F{yellow}[%f%F{cyan}%~%f%F{yellow}]%f%F{red}▶%f%b "
+  PROMPT='%B%F{yellow}[%f%F{cyan}%~%f%F{yellow}]%f%(?.. %F{red}✗%?%f) %F{red}▶%f%b '
   RPROMPT="%F{8}%D{%F %T}%f"
 fi
 
@@ -159,47 +157,40 @@ else
   alias l='ls -1G'
 fi
 
-# Directory navigation
 alias ..='cd ..'
 alias ...='cd ../..'
 alias cd-='cd -'
 alias d='dirs -v'
 
-# Re-run last command with sudo (edit-then-run in the line editor)
 please() {
   local last; last=$(fc -ln -1) || return
   [[ -z $last ]] && return
   print -z -- $([[ $last == sudo\ * ]] && echo "$last" || echo "sudo $last")
 }
 
-# Use bat instead of cat if available (interactive only)
 if [[ -o interactive ]] && command -v bat &>/dev/null; then
   alias cat='bat'
 fi
 
-# Git & brew shortcuts
 gitup() {
   git rev-parse --is-inside-work-tree &>/dev/null || { echo "Not in a git repo"; return 1; }
   git add -A && git commit -m "Update: $(date +'%F %T')" && git push
 }
-alias brewup='brew update && brew upgrade && brew autoremove && brew cleanup && brew doctor'
+alias brewup='brew update && brew upgrade && brew autoremove && brew cleanup && { brew doctor || true; }'
 alias reload='source ${ZDOTDIR:-$HOME}/.zshrc'
 
-# Respect virtualenvs with pip
 if [[ -z ${VIRTUAL_ENV:-} ]]; then
   alias pip='python3 -m pip'
   alias pip3='python3 -m pip'
 fi
-
-# Optional: pipx / uv quality-of-life (only outside virtualenvs)
 if [[ -z ${VIRTUAL_ENV:-} ]]; then
   command -v pipx &>/dev/null && export PIPX_DEFAULT_PYTHON="$(command -v python3)"
   if command -v uv &>/dev/null; then
     alias pip='uv pip'
     alias pip3='uv pip'
     export UV_PYTHON="$(command -v python3)"
-    # Keep a hard alias to stock pip for when needed
     alias pipp='python3 -m pip'
+    alias pip.py='python3 -m pip'
   fi
 fi
 
@@ -208,7 +199,11 @@ localip() {
   local iface; iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
   [[ -n $iface ]] && ipconfig getifaddr "$iface" 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null
 }
-publicip() { curl -fsS --max-time 2 https://ifconfig.me || dig +short -4 txt ch whoami.cloudflare @1.1.1.1; echo; }
+publicip() {
+  curl -fsS --max-time 2 https://ifconfig.me \
+  || dig +short -4 txt ch whoami.cloudflare @1.1.1.1 | tr -d '"' \
+  ; echo
+}
 alias netinfo='ifconfig -a'
 alias sysmon='top -l 1 | grep -E "^CPU|^PhysMem"'
 alias sysmonlive='top -l 0 -stats pid,command,cpu,mem -o cpu'
@@ -222,7 +217,6 @@ note() { mkdir -p ~/Notes; printf '%s %s\n' "$(date +'%F %T')" "$*" >> ~/Notes/n
 openports() { sudo lsof -iTCP -sTCP:LISTEN -P -n; }
 timer() { local T=${1:-0}; echo "Timer set for $T seconds."; ( sleep "$T" && osascript -e 'beep' && osascript -e 'display notification "Time'\''s up!" with title "Zsh"' ) & }
 
-# Extract archives (BSD-friendly; avoid stray "--" where unsupported)
 extract() {
   local f=$1
   [[ -f $f ]] || { echo "'$f' is not a valid file"; return 1; }
@@ -230,13 +224,20 @@ extract() {
     *.tar.bz2|*.tbz2) tar xjf "$f" ;;
     *.tar.gz|*.tgz)   tar xzf "$f" ;;
     *.tar.xz)         tar xJf "$f" ;;
-    *.tar.zst)        tar --zstd -xf "$f" ;;
+    *.tar.zst)
+      if tar --help 2>&1 | grep -q zstd; then
+        tar --zstd -xf "$f"
+      else
+        command -v unzstd &>/dev/null && unzstd -c "$f" | tar xf - || \
+          echo "Need tar with zstd or unzstd"
+      fi
+      ;;
     *.zst)            unzstd "$f" ;;
     *.xz)             xz -d "$f" ;;
     *.bz2)            bunzip2 "$f" ;;
     *.gz)             gunzip "$f" ;;
     *.tar)            tar xf "$f" ;;
-    *.zip)            unzip -q "$f" ;;
+    *.zip)            ditto -xk -- "$f" . ;;
     *.7z)             command -v 7z &>/dev/null && 7z x "$f" || echo "7z not installed" ;;
     *.rar)            command -v unrar &>/dev/null && unrar x "$f" || echo "unrar not installed" ;;
     *.Z)              uncompress "$f" ;;
@@ -244,7 +245,6 @@ extract() {
   esac
 }
 
-# Run command and send macOS notification on completion
 notify() {
   if "$@"; then
     osascript -e 'display notification "Command completed!" with title "Zsh"'
@@ -263,18 +263,17 @@ if command -v fzf &>/dev/null; then
     export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git"'
     export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
   fi
-  # QoL defaults
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-} --height=80% --border --info=inline --prompt='❯ ' --marker='*'"
   [[ -n $TMUX ]] && export FZF_TMUX=1
 
   fhistory() {
     local sel
-    sel=$(fc -rl 1 | awk '{ $1=""; sub(/^ /,""); print }' | awk '!seen[$0]++' | fzf) || return
+    sel=$(fc -rl 1 | awk '{$1=""; sub(/^ /,""); print}' | awk '!seen[$0]++' | fzf --tac) || return
     print -z -- "$sel"
   }
   fcd() {
     local dir
-    dir=$(find . -name .git -type d -prune -o -type d -print 2>/dev/null | fzf) || return
+    dir=$(find . -name .git -prune -o -name node_modules -prune -o -type d -print 2>/dev/null | fzf) || return
     cd -- "$dir"
   }
 fi
@@ -293,18 +292,13 @@ cdf() {
   cd -- "$d"
 }
 reveal() { open -R -- "${1:A:-.}"; }
-# Copy absolute path (optionally with filename)
 cpath() { printf %s "$PWD${1:+/$1}" | pbcopy; echo "Copied: $(pbpaste)"; }
-# Open last downloaded file in Finder (most recent)
-odl() { local f=~/Downloads/*(om[-1]); [[ -n $f ]] && open -R "$f"; }
-# Open current directory in Finder quickly
+odl() { local f=~/Downloads/*(Nom[-1]); [[ -n $f ]] && open -R "$f" || echo "No recent download"; }
 alias o.='open .'
 
 #---------------------------- PATH & Environment ------------------------------#
-# pnpm and Python user base
 export PNPM_HOME="$HOME/Library/pnpm"
 
-# Compute PY_USER_BASE lazily (avoid Python spawn if already set / not needed)
 if [[ -z ${PY_USER_BASE:-} ]] && command -v python3 &>/dev/null; then
   PY_USER_BASE=$(python3 - <<'PY' 2>/dev/null
 import site,sys; sys.stdout.write(site.USER_BASE)
@@ -312,29 +306,24 @@ PY
 )
 fi
 
-# Build PATH in one shot (typeset -U path removes dups)
 path=(
   /opt/homebrew/bin /opt/homebrew/sbin
   /usr/local/bin /usr/local/sbin
   $path
 )
-# Only add these if they actually exist
 [[ -n $PNPM_HOME && -d $PNPM_HOME ]] && path=($PNPM_HOME $path)
 [[ -n $PY_USER_BASE && -d $PY_USER_BASE/bin ]] && path=($PY_USER_BASE/bin $path)
 
-# Tools that hook into shell
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 command -v direnv  &>/dev/null && eval "$(direnv hook zsh)"
 
 #--------------------------- Plugins (interactive only) -----------------------#
 if [[ -o interactive ]]; then
-  # Autosuggestions tuning (set BEFORE sourcing the plugin)
   ZSH_AUTOSUGGEST_USE_ASYNC=1
   ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=50000
 
   [[ -f /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && \
     source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-  # Keep syntax highlighting last so it plays nice with other widgets
   [[ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
     source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
