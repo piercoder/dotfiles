@@ -1,8 +1,12 @@
 ###############################################################################
 # zshrc-macos — Lean & Fast Zsh for macOS
-# Author: Pierpaolo Pattitoni (@piercoder)
+# Author: Pierpaolo Pattitoni (@piercoder) — refined for performance and safety
 # License: MIT
 ###############################################################################
+
+#----------------------------------------------------------------------#
+# Environment Settings and Initial Configurations
+#----------------------------------------------------------------------#
 
 if [[ "$(locale LC_CTYPE)" == "UTF-8" ]]; then
     setopt COMBINING_CHARS
