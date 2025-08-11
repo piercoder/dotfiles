@@ -199,16 +199,12 @@ localip() {
   local iface; iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
   [[ -n $iface ]] && ipconfig getifaddr "$iface" 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null
 }
-publicip() {
-  curl -fsS --max-time 2 https://ifconfig.me \
-  || dig +short -4 txt ch whoami.cloudflare @1.1.1.1 | tr -d '"' \
-  ; echo
-}
+publicip() { dig +short -4 txt ch whoami.cloudflare @1.1.1.1 | tr -d '"' || printf '\n'; }
 alias netinfo='ifconfig -a'
 alias sysmon='top -l 1 | grep -E "^CPU|^PhysMem"'
 alias sysmonlive='top -l 0 -stats pid,command,cpu,mem -o cpu'
 psx() { pgrep -lf "$@"; }
-htop() { command -v htop &>/dev/null && command htop || top; }
+alias htop='command -v htop >/dev/null && command htop || top'
 
 f() { find . -type f -iname "${1:-*}" -not -path "*/.git/*"; }
 hgrep() { [[ -n $1 ]] || { echo "usage: hgrep <pattern>"; return 1; }; fc -l 1 | grep -i -- "$1"; }
@@ -266,11 +262,10 @@ if command -v fzf &>/dev/null; then
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-} --height=80% --border --info=inline --prompt='❯ ' --marker='*'"
   [[ -n $TMUX ]] && export FZF_TMUX=1
 
-  fhistory() {
-    local sel
-    sel=$(fc -rl 1 | awk '{$1=""; sub(/^ /,""); print}' | awk '!seen[$0]++' | fzf --tac) || return
-    print -z -- "$sel"
-  }
+fhistory() {
+  fc -rl 1 | sed 's/^[[:space:]]*[0-9]*[[:space:]]*//' | awk '!seen[$0]++' | fzf --tac | read -r sel || return
+  print -z -- "$sel"
+}
   fcd() {
     local dir
     dir=$(find . -name .git -prune -o -name node_modules -prune -o -type d -print 2>/dev/null | fzf) || return
