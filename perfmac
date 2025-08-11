@@ -1,14 +1,44 @@
 #!/bin/zsh
+###############################################################################
+# perfmac — macOS Performance & Latency Tuner
 #
-# perfmac — macOS performance & latency tuner (zsh, compact, no backups)
-# - Low-latency UI, snappy input, lighter compositor load
-# - Optional aggressive cache/log cleanup
+# Description:
+#   Optimizes macOS for maximum responsiveness by disabling or reducing
+#   animations, tuning input delays, lowering compositor overhead, and applying
+#   various Finder/Dock/system tweaks.
 #
-# CLI:
-#   -d  Dry run (print actions only, do not change system)
-#   -a  Aggressive mode (deeper cleanups; first launches may be slower)
-#   -s  Skip softwareupdate (no OS/app update checks)
-#   -h  Help
+# Features:
+#   - Low-latency UI + fast keyboard repeat rates
+#   - Finder & Dock optimizations (Dock always visible)
+#   - Optional aggressive cleanup of caches/logs
+#   - Spotlight control (disable on external drives)
+#   - Safe to run multiple times
+#   - Supports dry-run mode
+#
+# Usage:
+#   ./perfmac [options]
+#
+# Options:
+#   -d    Dry run: print commands without executing
+#   -a    Aggressive mode: deeper cache/log cleanup
+#   -s    Skip software update checks
+#   -h    Show usage/help
+#
+# Examples:
+#   ./perfmac            # default optimizations
+#   ./perfmac -a -s      # aggressive cleanup, skip updates
+#   ./perfmac -d         # dry-run mode
+#
+# Author:
+#   Pierpaolo Pattitoni — https://github.com/piercoder
+#
+# License:
+#   MIT License — See https://opensource.org/licenses/MIT
+#
+# Warning:
+#   This script writes to system preferences and requires sudo for some tasks.
+#   Review the code before running. Use at your own risk.
+###############################################################################
 
 set -e
 set -u
