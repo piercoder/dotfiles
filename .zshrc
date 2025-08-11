@@ -4,23 +4,23 @@
 # License: MIT
 ###############################################################################
 
-# On-demand profiling (only active when launched with ZPROF=1)
+# Enable on-demand profiling when launched with ZPROF=1
 [[ -n $ZPROF ]] && zmodload zsh/zprof
 
 #------------------------- Environment & Options -----------------------------#
-# Enable UTF-8 combining chars only if terminal uses UTF-8
+# Enable UTF-8 combining chars if terminal uses UTF-8
 if [[ ${LC_CTYPE:-$LANG} == *UTF-8* ]]; then
   setopt combining_chars
 fi
 
-# Safety & quality-of-life shell options
-setopt noclobber              # prevent accidental overwriting with >
-setopt interactive_comments   # allow comments (#) at the interactive prompt
-setopt pipefail               # fail a pipeline if any command fails
-setopt magicequalsubst        # expand ~ and vars in VAR=~/path
+# Safety & convenience shell options
+setopt noclobber               # prevent accidental overwrite with >
+setopt interactive_comments    # allow # comments in interactive mode
+set -o pipefail                 # fail pipeline if any command fails
+setopt magicequalsubst          # expand ~ and vars in VAR=~/path
 setopt auto_pushd pushd_ignore_dups pushd_silent
 
-# History: robust & low-noise
+# History configuration
 HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
 HISTSIZE=5000
 SAVEHIST=2000
@@ -34,18 +34,19 @@ setopt hist_expire_dups_first
 setopt hist_verify
 setopt hist_save_no_dups
 setopt hist_find_no_dups
+# [[ -f $HISTFILE ]] && chmod 600 "$HISTFILE"  # run once to secure history file
 
 setopt no_beep
 setopt extended_glob
 
-# Apple’s per-terminal defaults (loads keymap & paths)
+# Load Apple's per-terminal defaults
 [[ -r "/etc/zshrc_$TERM_PROGRAM" ]] && source "/etc/zshrc_$TERM_PROGRAM"
 
-# Ensure no duplicate PATH/FPATH entries
+# Avoid duplicate path entries
 typeset -U path fpath
 
 #------------------------------ Completion -----------------------------------#
-# Add Homebrew completions BEFORE compinit
+# Add Homebrew completions before compinit
 [[ -d /opt/homebrew/share/zsh/site-functions ]] && fpath=(/opt/homebrew/share/zsh/site-functions $fpath)
 [[ -d /usr/local/share/zsh/site-functions   ]] && fpath=(/usr/local/share/zsh/site-functions   $fpath)
 
@@ -56,21 +57,20 @@ zmodload zsh/complist
 ZCOMPDUMP="$XDG_CACHE_HOME/zsh/zcompdump-${ZSH_VERSION}"
 mkdir -p "${ZCOMPDUMP:h}"
 
-# Load completion with caching
-compinit -d "$ZCOMPDUMP"
+# Load completions using cache only if valid
+compinit -C -d "$ZCOMPDUMP"
 
-# Completion caching and UI improvements
+# Completion styles
 zstyle ':completion:*' use-cache on
 zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/cached-completions"
 zstyle ':completion:*' menu select
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*:descriptions' format '%F{yellow}%d%f'
 zstyle ':completion:*' list-colors ''
-
-# Case-insensitive matching, ignore . _ - differences, allow minor typos
 zstyle ':completion:*' matcher-list \
   'm:{a-z}={A-Za-z}' \
   'r:|[._-]=** r:|=**'
+zstyle ':completion:*' completer _extensions _complete _approximate
 
 # Keep completions after sudo
 zstyle ':completion:*:sudo:*' command-path \
@@ -81,6 +81,8 @@ zstyle ':completion:*:sudo:*' command-path \
 _comp_options+=(globdots)
 
 #-------------------------- Key bindings (terminfo) ---------------------------#
+bindkey -e  # Emacs keymap
+
 if [[ -r ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR} ]]; then
   source ${ZDOTDIR:-$HOME}/.zkbd/${TERM}-${VENDOR}
 else
@@ -95,7 +97,7 @@ fi
 [[ -n ${key[Up]}     ]] && bindkey "${key[Up]}"     up-line-or-search
 [[ -n ${key[Down]}   ]] && bindkey "${key[Down]}"   down-line-or-search
 
-# Disable Ctrl-S / Ctrl-Q terminal freeze (flow control)
+# Disable Ctrl-S / Ctrl-Q terminal freeze
 [[ -t 1 ]] && stty -ixon 2>/dev/null
 
 #-------------------------------- Prompt --------------------------------------#
@@ -106,18 +108,19 @@ else
   RPROMPT="%B%F{yellow}[%f%F{cyan}%*%f%F{yellow}]%f%b"
 fi
 
-# Report runtime for slow commands (>5s)
+# Report execution time for slow commands
 export REPORTTIME=5
 export TIMEFMT=$'%J\t%*E real\t%U user\t%S sys'
 
 #------------------------------- Aliases --------------------------------------#
 if [[ -o interactive ]]; then
-  alias rm='rm -I'    # confirm only when deleting >3 files
+  alias rm='rm -I'
   alias mv='mv -i'
   alias cp='cp -i'
-  alias sudo='sudo '  # preserve aliases after sudo
+  alias sudo='sudo '
 fi
 
+# Directory listing aliases
 if command -v eza &>/dev/null; then
   alias ll='eza -alhg --icons'
   alias la='eza -A'
@@ -127,12 +130,20 @@ else
   alias la='ls -A'
   alias l='ls -1G'
 fi
+
+# Directory navigation
 alias ..='cd ..'
 alias ...='cd ../..'
 alias cd-='cd -'
+alias d='dirs -v'
 
+# Re-run last command with sudo
+alias please='sudo $(fc -ln -1)'
+
+# Use bat instead of cat if available
 command -v bat &>/dev/null && alias cat='bat'
 
+# Git & brew shortcuts
 gitup() { git add -A && git commit -m "Update: $(date +'%F %T')" && git push; }
 alias brewup='brew update && brew upgrade && brew autoremove && brew cleanup && brew doctor'
 alias reload='source ~/.zshrc'
@@ -147,16 +158,17 @@ localip() {
 publicip() { curl -fsS https://ifconfig.me || dig +short txt ch whoami.cloudflare @1.1.1.1; echo; }
 alias netinfo='ifconfig -a'
 alias sysmon='top -l 1 | grep -E "^CPU|^PhysMem"'
-psx() { pgrep -af -- "$@"; }
+psx() { pgrep -lf -- "$@"; }
 htop() { command -v htop &>/dev/null && command htop || top; }
 
-#------------------------------ Functions -------------------------------------#
 f() { find . -type f -iname "${1:-*}" -not -path "*/.git/*"; }
 hgrep() { [[ -n $1 ]] || { echo "usage: hgrep <pattern>"; return 1; }; fc -l 1 | grep -i -- "$1"; }
 clast() { fc -ln -1 | pbcopy; }
 note() { mkdir -p ~/Notes; printf '%s %s\n' "$(date +'%F %T')" "$*" >> ~/Notes/notes.txt && echo "Note added!"; }
 openports() { sudo lsof -iTCP -sTCP:LISTEN -P -n; }
-timer() { local T=${1:-0}; echo "Timer set for $T seconds."; ( sleep "$T" && osascript -e 'display notification "Time'"'"'s up!" with title "Zsh"' ) & }
+timer() { local T=${1:-0}; echo "Timer set for $T seconds."; ( sleep "$T" && osascript -e 'beep' && osascript -e 'display notification "Time'\''s up!" with title "Zsh"' ) & }
+
+# Extract archives
 extract() {
   local f=$1
   [[ -f $f ]] || { echo "'$f' is not a valid file"; return 1; }
@@ -175,6 +187,8 @@ extract() {
     *)                echo "Cannot extract $f" ;;
   esac
 }
+
+# Run command and send macOS notification on completion
 notify() {
   if "$@"; then
     osascript -e 'display notification "Command completed!" with title "Zsh"'
@@ -184,7 +198,7 @@ notify() {
   fi
 }
 
-# fzf helpers
+#----------------------------- FZF helpers ------------------------------------#
 if command -v fzf &>/dev/null; then
   if command -v fd &>/dev/null; then
     export FZF_DEFAULT_COMMAND='fd --hidden --strip-cwd-prefix --exclude .git'
@@ -206,7 +220,7 @@ if command -v fzf &>/dev/null; then
   }
 fi
 
-# macOS convenience
+#--------------------------- macOS convenience --------------------------------#
 take() { mkdir -p -- "$1" && cd -- "$1"; }
 cdf() {
   local d; d=$(osascript -e '
@@ -248,7 +262,6 @@ fi
 [[ -x ~/dotfiles/infomac ]] && ~/dotfiles/infomac
 
 #------------------------------ Optional: zcompile ----------------------------#
-# Uncomment to precompile; re-run when this file changes
 # autoload -Uz zrecompile
 # zrecompile -p ${ZDOTDIR:-$HOME}/.zshrc 2>/dev/null
 
