@@ -1,14 +1,37 @@
-#======================================================================#
-#    __     ___  __      __   __   __   ___  __
-#   |__) | |__  |__)    /  ` /  \ |  \ |__  |__)
-#   |    | |___ |  \    \__, \__/ |__/ |___ |  \
+###############################################################################
+# zshrc-macos — Optimized Zsh Configuration for macOS
 #
-#   My optimized .zshrc file for macOS with enhanced functions and aliases
-#======================================================================#
-
-#----------------------------------------------------------------------#
-# Environment Settings and Initial Configurations
-#----------------------------------------------------------------------#
+# Description:
+#   Customized and performance-tuned Zsh configuration for macOS.
+#   Includes enhanced keybindings, modern prompt, syntax highlighting,
+#   aliases, utility functions, and integrations with popular tools.
+#
+# Features:
+#   - UTF-8 locale support with combining characters
+#   - Improved history handling and deduplication
+#   - Completion system with menu selection
+#   - Smart terminal keybinding detection
+#   - Starship prompt (if installed) or custom fallback prompt
+#   - Syntax highlighting and autosuggestions
+#   - Useful aliases for file management, networking, Git, and system control
+#   - Utility functions for search, extraction, timers, and notifications
+#   - fzf-powered fuzzy search for history and directories
+#   - Environment setup for pnpm, zoxide, direnv, and Python
+#
+# Usage:
+#   Source this file from your ~/.zshrc:
+#       source ~/path/to/this-file.zsh
+#
+# Author:
+#   Pierpaolo Pattitoni — https://github.com/piercoder
+#
+# License:
+#   MIT License — https://opensource.org/licenses/MIT
+#
+# Warning:
+#   This file alters your shell environment, keybindings, PATH, and prompt.
+#   Review and adjust to match your workflow before using.
+###############################################################################
 
 if [[ "$(locale LC_CTYPE)" == "UTF-8" ]]; then
     setopt COMBINING_CHARS
