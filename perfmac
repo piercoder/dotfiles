@@ -28,7 +28,7 @@ SKIP_UPDATES=0
 
 # ---------- help / usage ----------
 usage() {
-  echo "Usage: mac-speed.zsh [options]"
+  echo "Usage: perfmac [options]"
   echo
   echo "Options:"
   echo "  -d    Dry run: show what would be done, without making changes"
@@ -37,9 +37,9 @@ usage() {
   echo "  -h    Show this help"
   echo
   echo "Examples:"
-  echo "  ./mac-speed.zsh          # run with defaults (safe)"
-  echo "  ./mac-speed.zsh -a       # add aggressive cleanups"
-  echo "  ./mac-speed.zsh -d -s    # dry run and skip updates"
+  echo "  ./perfmac          # run with defaults (safe)"
+  echo "  ./perfmac -a       # add aggressive cleanups"
+  echo "  ./perfmac -d -s    # dry run and skip updates"
 }
 
 # ---------- parse CLI options ----------
