@@ -1,21 +1,14 @@
 #!/bin/zsh
 #
-# perfmac — macOS performance & latency tuner (zsh, single file)
-# - Removes/reduces animations, improves input responsiveness
-# - Cuts compositor/GPU overhead for smoother UI
+# perfmac — macOS performance & latency tuner (zsh, compact, no backups)
+# - Low-latency UI, snappy input, lighter compositor load
 # - Optional aggressive cache/log cleanup
-# - Robust backups: user, currentHost, or system-level; else create empty .plist
 #
 # CLI:
 #   -d  Dry run (print actions only, do not change system)
 #   -a  Aggressive mode (deeper cleanups; first launches may be slower)
 #   -s  Skip softwareupdate (no OS/app update checks)
-#   -H  Hide Dock (auto-hide ON). Default: Dock visible
 #   -h  Help
-#
-# Restore tip:
-#   defaults import <domain> ~/DefaultsBackup/<timestamp>/<domain>.plist
-#
 
 set -e
 set -u
@@ -24,7 +17,6 @@ set -o pipefail
 DRY_RUN=0
 AGGRESSIVE=0
 SKIP_UPDATES=0
-DOCK_HIDE=0
 
 usage() {
   echo "Usage: perfmac [options]"
@@ -33,102 +25,47 @@ usage() {
   echo "  -d    Dry run: show what would be done, without making changes"
   echo "  -a    Aggressive mode: deeper cache/log cleanups (caches will rebuild)"
   echo "  -s    Skip software updates to save time"
-  echo "  -H    Hide the Dock (auto-hide ON). Default keeps Dock visible"
   echo "  -h    Show this help"
   echo
   echo "Examples:"
-  echo "  ./perfmac          # run with defaults (Dock visible)"
-  echo "  ./perfmac -H       # same, but hide Dock"
+  echo "  ./perfmac          # run with defaults"
   echo "  ./perfmac -a -s    # aggressive clean + skip updates"
   echo "  ./perfmac -d       # dry run (no changes)"
 }
 
-while getopts "dashH" opt; do
+while getopts "dash" opt; do
   case "$opt" in
     d) DRY_RUN=1 ;;
     a) AGGRESSIVE=1 ;;
     s) SKIP_UPDATES=1 ;;
-    H) DOCK_HIDE=1 ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
 done
 shift $((OPTIND-1))
 
-readonly START_TS="$(date +%Y%m%d-%H%M%S)"
-readonly BACKUP_DIR="${HOME}/DefaultsBackup/${START_TS}"
+# --- utils ---
 readonly GREEN=$'\033[32m'; readonly YELLOW=$'\033[33m'; readonly DIM=$'\033[2m'; readonly RESET=$'\033[0m'
 readonly SUDO="${SUDO:-sudo}"
 
 log()  { printf "%s•%s %s\n" "$GREEN" "$RESET" "$*"; }
 warn() { printf "%s!%s %s\n"  "$YELLOW" "$RESET" "$*"; }
-run()  {
-  if [[ "$DRY_RUN" == "1" ]]; then
-    printf "%sDRY:%s %s\n" "$DIM" "$RESET" "$*"
-  else
-    eval "$@"
-  fi
-}
+run()  { if [[ "$DRY_RUN" == "1" ]]; then printf "%sDRY:%s %s\n" "$DIM" "$RESET" "$*"; else eval "$@"; fi }
 
 require_macos() {
-  if ! command -v sw_vers >/dev/null; then
-    echo "This script targets macOS."
-    exit 1
-  fi
+  if ! command -v sw_vers >/dev/null; then echo "This script targets macOS."; exit 1; fi
   local ver; ver="$(sw_vers -productVersion)"
   log "Detected macOS ${ver}"
 }
 
 need_tools() {
   for cmd in defaults killall mdutil diskutil softwareupdate; do
-    if ! command -v "$cmd" >/dev/null; then
-      echo "Missing required tool: $cmd"
-      exit 1
-    fi
+    if ! command -v "$cmd" >/dev/null; then echo "Missing required tool: $cmd"; exit 1; fi
   done
 }
 
-_canon_domain() {
-  local d="$1"
-  if [[ "$d" == "-g" || "$d" == "kCFPreferencesAnyApplication" ]]; then
-    echo "NSGlobalDomain"
-  else
-    echo "$d"
-  fi
-}
-
-_backup_empty_plist() {
-  local out="$1"
-  run "printf '%s' '<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict/>\n</plist>\n' > '${out}'"
-}
-
-backup_domain() {
-  local raw="$1"
-  local domain="$(_canon_domain "$raw")"
-  mkdir -p -- "$BACKUP_DIR"
-
-  if /usr/bin/defaults domains | grep -q -E "(^| )${domain}( |$)"; then
-    run "/usr/bin/defaults export '${domain}' - > '${BACKUP_DIR}/${domain}.plist' 2>/dev/null || true"
-    return
-  fi
-
-  if /usr/bin/defaults -currentHost domains | grep -q -E "(^| )${domain}( |$)"; then
-    run "/usr/bin/defaults -currentHost export '${domain}' - > '${BACKUP_DIR}/${domain}.plist' 2>/dev/null || true"
-    return
-  fi
-
-  if [[ -f "/Library/Preferences/${domain}.plist" ]]; then
-    run "cp '/Library/Preferences/${domain}.plist' '${BACKUP_DIR}/${domain}.plist'"
-    return
-  fi
-
-  _backup_empty_plist "${BACKUP_DIR}/${domain}.plist"
-}
-
 write_default() {
-  local raw_domain="$1" key="$2" type="$3" value="$4"
-  local domain="$(_canon_domain "$raw_domain")"
-  backup_domain "$domain"
+  local domain="$1" key="$2" type="$3" value="$4"
   log "defaults write ${domain} ${key} (-${type}) => ${value}"
   run "/usr/bin/defaults write '${domain}' '${key}' -${type} ${value}"
 }
@@ -136,114 +73,131 @@ write_default_global() { write_default "NSGlobalDomain" "$@"; }
 
 host_default() {
   local domain="$1" key="$2" type="$3" value="$4"
-  backup_domain "$domain"
   log "defaults -currentHost write ${domain} ${key} (-${type}) => ${value}"
   run "/usr/bin/defaults -currentHost write '${domain}' '${key}' -${type} ${value}"
 }
 
-restart_if_running() {
-  for app in "$@"; do
-    run "killall '${app}' 2>/dev/null || true"
+restart_if_running() { for app in "$@"; do run "killall '${app}' 2>/dev/null || true"; done }
+
+# FIXED: robust zsh implementation (works with set -u)
+apply_specs() {
+  # $1 is a newline-separated spec string: "domain|key|type|value"
+  local -a specs; specs=("${(f)1}")   # split on newlines
+  local line domain key type value _
+  for line in "${specs[@]}"; do
+    [[ -z "$line" ]] && continue
+    IFS='|' read -r domain key type value <<< "$line"
+    if [[ "$domain" == "HOST" ]]; then
+      IFS='|' read -r _ domain key type value <<< "$line"
+      host_default "$domain" "$key" "$type" "$value"
+    elif [[ "$domain" == "NSGlobalDomain" ]]; then
+      write_default_global "$key" "$type" "$value"
+    else
+      write_default "$domain" "$key" "$type" "$value"
+    fi
   done
 }
 
+# --- preflight ---
 require_macos
 need_tools
 
-for d in \
-  NSGlobalDomain \
-  com.apple.universalaccess \
-  com.apple.dock \
-  com.apple.finder \
-  com.apple.screencapture \
-  com.apple.ActivityMonitor \
-  com.apple.TextEdit \
-  com.apple.Music \
-  com.apple.ImageCapture \
-  com.apple.loginwindow
-do
-  backup_domain "$d"
-done
+# Summary banner
+echo "======================================="
+echo " perfmac run summary"
+echo " - Dry run:        $([[ ${DRY_RUN:-0} -eq 1 ]] && echo YES || echo NO)"
+echo " - Aggressive:     $([[ ${AGGRESSIVE:-0} -eq 1 ]] && echo YES || echo NO)"
+echo " - Skip updates:   $([[ ${SKIP_UPDATES:-0} -eq 1 ]] && echo YES || echo NO)"
+echo "======================================="
 
+# --- specs (compact, no duplication) ---
+UI_SPECS=$'
+NSGlobalDomain|ApplePressAndHoldEnabled|bool|false
+NSGlobalDomain|KeyRepeat|int|1
+NSGlobalDomain|InitialKeyRepeat|int|15
+NSGlobalDomain|NSAutomaticWindowAnimationsEnabled|bool|false
+NSGlobalDomain|NSWindowResizeTime|float|0.001
+NSGlobalDomain|NSScrollAnimationEnabled|bool|false
+NSGlobalDomain|NSToolbarTitleViewRolloverDelay|float|0
+NSGlobalDomain|WebKitScrollAnimationsEnabled|bool|false
+NSGlobalDomain|NSScrollViewRubberbanding|bool|false
+NSGlobalDomain|QLPanelAnimationDuration|float|0
+'
+
+ACCESSIBILITY_SPECS=$'
+com.apple.universalaccess|reduceTransparency|bool|true
+com.apple.universalaccess|reduceMotion|bool|true
+com.apple.universalaccess|showWindowTitlebarIcons|bool|true
+'
+
+DOCK_SPECS=$'
+com.apple.dock|autohide|bool|false
+com.apple.dock|launchanim|bool|false
+com.apple.dock|mineffect|string|scale
+com.apple.dock|expose-animation-duration|float|0
+com.apple.dock|show-recents|bool|false
+com.apple.dock|mru-spaces|bool|true
+com.apple.dock|tilesize|int|44
+com.apple.dock|orientation|string|bottom
+com.apple.dock|static-only|bool|true
+'
+
+FINDER_SPECS=$'
+com.apple.finder|FXPreferredViewStyle|string|Nlsv
+com.apple.finder|ShowPathbar|bool|true
+com.apple.finder|ShowStatusBar|bool|true
+com.apple.finder|_FXSortFoldersFirst|bool|true
+com.apple.finder|_FXSortFoldersFirstOnDesktop|bool|true
+com.apple.finder|FXRemoveOldTrashItems|bool|true
+com.apple.finder|FXEnableExtensionChangeWarning|bool|false
+com.apple.finder|QuitMenuItem|bool|true
+com.apple.finder|AppleShowAllFiles|bool|true
+com.apple.finder|CreateDesktop|bool|true
+com.apple.finder|FXDefaultSearchScope|string|SCcf
+'
+
+SCREENSHOT_SPECS=$'
+com.apple.screencapture|disable-shadow|bool|true
+com.apple.screencapture|include-date|bool|true
+com.apple.screencapture|show-thumbnail|bool|false
+com.apple.screencapture|type|string|png
+com.apple.screencapture|location|string|'${HOME}'/Desktop
+'
+
+APPS_SPECS=$'
+com.apple.ActivityMonitor|IconType|int|5
+com.apple.ActivityMonitor|UpdatePeriod|int|2
+com.apple.TextEdit|RichText|bool|false
+com.apple.Music|userWantsPlaybackNotifications|bool|false
+HOST|com.apple.ImageCapture|disableHotPlug|bool|true
+'
+
+# --- apply settings ---
 log "Applying low-latency UI settings…"
+apply_specs "$UI_SPECS"
 
-write_default_global ApplePressAndHoldEnabled bool false
-write_default_global KeyRepeat int 1
-write_default_global InitialKeyRepeat int 15
-
-write_default_global NSAutomaticWindowAnimationsEnabled bool false
-write_default_global NSWindowResizeTime float 0.001
-write_default_global NSScrollAnimationEnabled bool false
-write_default_global NSToolbarTitleViewRolloverDelay float 0
-write_default_global WebKitScrollAnimationsEnabled bool false
-
-write_default_global NSScrollViewRubberbanding bool false
-write_default_global QLPanelAnimationDuration float 0
-
+log "Reducing compositor overhead (Accessibility)…"
 run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceTransparency -bool true"
 run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceMotion -bool true"
 run "${SUDO} /usr/bin/defaults write com.apple.universalaccess showWindowTitlebarIcons -bool true"
 
-log "Tuning Dock & Mission Control…"
-
-if [[ "$DOCK_HIDE" == "1" ]]; then
-  write_default com.apple.dock autohide bool true
-  write_default com.apple.dock autohide-delay float 0
-  write_default com.apple.dock autohide-time-modifier float 0
-else
-  write_default com.apple.dock autohide bool false
-  write_default com.apple.dock autohide-delay float 0
-  write_default com.apple.dock autohide-time-modifier float 0
-fi
-
-write_default com.apple.dock launchanim bool false
-write_default com.apple.dock mineffect string scale
-write_default com.apple.dock expose-animation-duration float 0
-write_default com.apple.dock show-recents bool false
-write_default com.apple.dock mru-spaces bool true
-write_default com.apple.dock tilesize int 44
-write_default com.apple.dock orientation string bottom
-write_default com.apple.dock static-only bool true
+log "Tuning Dock (visible)…"
+apply_specs "$DOCK_SPECS"
 
 log "Optimizing Finder…"
+apply_specs "$FINDER_SPECS"
 
-write_default com.apple.finder FXPreferredViewStyle string Nlsv
-write_default com.apple.finder ShowPathbar bool true
-write_default com.apple.finder ShowStatusBar bool true
-write_default com.apple.finder _FXSortFoldersFirst bool true
-write_default com.apple.finder _FXSortFoldersFirstOnDesktop bool true
-write_default com.apple.finder FXRemoveOldTrashItems bool true
-write_default com.apple.finder FXEnableExtensionChangeWarning bool false
-write_default com.apple.finder QuitMenuItem bool true
-write_default com.apple.finder AppleShowAllFiles bool true
-write_default com.apple.finder CreateDesktop bool true
-write_default com.apple.finder FXDefaultSearchScope string SCcf
-
-log "Configuring screenshots…"
-
-write_default com.apple.screencapture disable-shadow bool true
-write_default com.apple.screencapture include-date bool true
-write_default com.apple.screencapture show-thumbnail bool false
-write_default com.apple.screencapture type string png
-write_default com.apple.screencapture location string "${HOME}/Desktop"
+log "Configuring Screenshots…"
+apply_specs "$SCREENSHOT_SPECS"
 
 log "Tuning common apps & services…"
+apply_specs "$APPS_SPECS"
 
-write_default com.apple.ActivityMonitor IconType int 5
-write_default com.apple.ActivityMonitor UpdatePeriod int 2
-write_default com.apple.TextEdit RichText bool false
-write_default com.apple.Music userWantsPlaybackNotifications bool false
-host_default com.apple.ImageCapture disableHotPlug bool true
-
-log "Adjusting Spotlight indexing…"
-
+# --- Spotlight tweaks ---
+log "Adjusting Spotlight (keep on system drive; disable on externals)…"
 for vol in /Volumes/*; do
-  if [[ ! -e "$vol" ]]; then
-    continue
-  fi
-  if [[ -L "$vol" ]]; then
-    continue
-  fi
+  if [[ ! -e "$vol" ]]; then continue; fi
+  if [[ -L "$vol" ]]; then continue; fi
   if diskutil info "$vol" 2>/dev/null | grep -q "External:.*Yes"; then
     warn "Disabling Spotlight on external volume: $vol"
     run "${SUDO} /usr/bin/mdutil -i off '$vol' 2>/dev/null || true"
@@ -251,13 +205,13 @@ for vol in /Volumes/*; do
 done
 run "${SUDO} /usr/bin/mdutil -i on / 2>/dev/null || true"
 
+# --- Login/window restore behavior ---
 log "Disabling app relaunch after login/logout…"
-
 write_default com.apple.loginwindow TALLogoutSavesState bool false
 write_default com.apple.loginwindow LoginwindowLaunchesRelaunchApps bool false
 
+# --- Maintenance (safe) ---
 log "Running safe maintenance…"
-
 if [[ "$SKIP_UPDATES" != "1" ]]; then
   warn "Checking for software updates (may take a while)…"
   run "softwareupdate -ia --verbose || true"
@@ -272,8 +226,9 @@ fi
 log "Rotating logs (periodic daily/weekly/monthly)…"
 run "${SUDO} periodic daily weekly monthly || true"
 
+# --- Aggressive mode (optional) ---
 if [[ "$AGGRESSIVE" == "1" ]]; then
-  warn "AGGRESSIVE=1 — heavier cleanups enabled. Backups in ${BACKUP_DIR}"
+  warn "AGGRESSIVE=1 — deeper cache/log cleanups enabled"
   run "${SUDO} rm -rf /Library/Caches/* 2>/dev/null || true"
   run "rm -rf '${HOME}/Library/Caches/'* 2>/dev/null || true"
   run "${SUDO} rm -rf /Library/Logs/* 2>/dev/null || true"
@@ -284,12 +239,10 @@ if [[ "$AGGRESSIVE" == "1" ]]; then
   run "rm -rf '${HOME}/Library/Preferences/com.apple.dock.db' 2>/dev/null || true"
 fi
 
+# --- Apply & restart affected agents ---
 log "Restarting agents to apply changes…"
 run "killall cfprefsd 2>/dev/null || true"
 restart_if_running Dock Finder SystemUIServer Activity\\ Monitor TextEdit Music
 
 echo
-log "Done. Backups saved under: ${BACKUP_DIR}"
-echo "Files:"
-run "ls -1 '${BACKUP_DIR}' || true"
-echo "Tip: Reboot to fully apply Spotlight/LaunchServices changes."
+log "Done. Tip: Reboot to fully apply Spotlight/LaunchServices changes."
