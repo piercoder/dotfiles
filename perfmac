@@ -1,19 +1,20 @@
 #!/bin/zsh
 #
-# mac-speed.zsh — macOS performance & latency tuner (zsh edition, with CLI)
+# perfmac — macOS performance & latency tuner (zsh, single file)
 # - Removes/reduces animations, improves input responsiveness
 # - Cuts compositor/GPU overhead for smoother UI
 # - Optional aggressive cache/log cleanup
-# - Backs up changed preference domains for easy restore
+# - Backs up touched preference domains to ~/DefaultsBackup/<timestamp>
 #
 # CLI:
 #   -d  Dry run (print actions only, do not change system)
 #   -a  Aggressive mode (deeper cleanups; first launches may be slower)
 #   -s  Skip softwareupdate (no OS/app update checks)
+#   -H  Hide Dock (auto-hide ON). Default: Dock visible on primary display
 #   -h  Help (show this message)
 #
 # Restore tip:
-#   Use `defaults import <domain> <backup-file.plist>` from ~/DefaultsBackup/<timestamp>/
+#   Use: defaults import <domain> ~/DefaultsBackup/<timestamp>/<domain>.plist
 #
 
 # ---------- strict mode ----------
@@ -25,6 +26,7 @@ set -o pipefail
 DRY_RUN=0
 AGGRESSIVE=0
 SKIP_UPDATES=0
+DOCK_HIDE=0
 
 # ---------- help / usage ----------
 usage() {
@@ -34,20 +36,23 @@ usage() {
   echo "  -d    Dry run: show what would be done, without making changes"
   echo "  -a    Aggressive mode: deeper cache/log cleanups (caches will rebuild)"
   echo "  -s    Skip software updates to save time"
+  echo "  -H    Hide the Dock (auto-hide ON). Default keeps Dock visible"
   echo "  -h    Show this help"
   echo
   echo "Examples:"
-  echo "  ./perfmac          # run with defaults (safe)"
-  echo "  ./perfmac -a       # add aggressive cleanups"
-  echo "  ./perfmac -d -s    # dry run and skip updates"
+  echo "  ./perfmac          # run with defaults (safe; Dock visible)"
+  echo "  ./perfmac -H       # same, but hide Dock"
+  echo "  ./perfmac -a -s    # aggressive clean + skip updates"
+  echo "  ./perfmac -d       # dry run (no changes)"
 }
 
 # ---------- parse CLI options ----------
-while getopts "dash" opt; do
+while getopts "dashH" opt; do
   case "$opt" in
     d) DRY_RUN=1 ;;
     a) AGGRESSIVE=1 ;;
     s) SKIP_UPDATES=1 ;;
+    H) DOCK_HIDE=1 ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
@@ -55,14 +60,14 @@ done
 shift $((OPTIND-1))
 
 # ---------- constants ----------
-readonly START_TS="$(date +%Y%m%d-%H%M%S)"                     # Timestamp for backup folder
-readonly BACKUP_DIR="${HOME}/DefaultsBackup/${START_TS}"       # Backup directory path
+readonly START_TS="$(date +%Y%m%d-%H%M%S)"               # Timestamp for backup folder
+readonly BACKUP_DIR="${HOME}/DefaultsBackup/${START_TS}" # Backup directory path
 readonly GREEN=$'\033[32m'; readonly YELLOW=$'\033[33m'; readonly DIM=$'\033[2m'; readonly RESET=$'\033[0m'
-readonly SUDO="${SUDO:-sudo}"                                  # Allow override for MDM/sandbox
+readonly SUDO="${SUDO:-sudo}"                            # Allow override for MDM/sandbox
 
 # ---------- helper functions ----------
-log()  { printf "%s•%s %s\n" "$GREEN" "$RESET" "$*"; }         # Pretty log output
-warn() { printf "%s!%s %s\n"  "$YELLOW" "$RESET" "$*"; }       # Pretty warning output
+log()  { printf "%s•%s %s\n" "$GREEN" "$RESET" "$*"; }   # Pretty log output
+warn() { printf "%s!%s %s\n"  "$YELLOW" "$RESET" "$*"; } # Pretty warning output
 run()  {
   if [[ "$DRY_RUN" == "1" ]]; then
     printf "%sDRY:%s %s\n" "$DIM" "$RESET" "$*"
@@ -89,22 +94,36 @@ need_tools() {
   done
 }
 
-backup_domain() {
-  local domain="$1"
-  mkdir -p -- "$BACKUP_DIR"
-  if /usr/bin/defaults domains | grep -q -E "(^| )${domain}( |$)"; then
-    # Some domains may not export cleanly; ignore failures.
-    run "/usr/bin/defaults export '${domain}' - > '${BACKUP_DIR}/${domain}.plist' 2>/dev/null || true"
+# Map shorthand to canonical domain so backups always get real filenames
+_canon_domain() {
+  local d="$1"
+  if [[ "$d" == "-g" || "$d" == "kCFPreferencesAnyApplication" ]]; then
+    echo "NSGlobalDomain"
+  else
+    echo "$d"
   fi
 }
 
+# Backup a domain prior to change (or drop a .absent marker if it didn't exist)
+backup_domain() {
+  local raw="$1"
+  local domain="$(_canon_domain "$raw")"
+  mkdir -p -- "$BACKUP_DIR"
+  if /usr/bin/defaults domains | grep -q -E "(^| )${domain}( |$)"; then
+    run "/usr/bin/defaults export '${domain}' - > '${BACKUP_DIR}/${domain}.plist' 2>/dev/null || true"
+  else
+    run "printf '%s\n' '/* domain had no existing prefs prior to change */' > '${BACKUP_DIR}/${domain}.absent'"
+  fi
+}
+
+# Write helpers (always backup first)
 write_default() {
-  local domain="$1" key="$2" type="$3" value="$4"
+  local raw_domain="$1" key="$2" type="$3" value="$4"
+  local domain="$(_canon_domain "$raw_domain")"
   backup_domain "$domain"
   log "defaults write ${domain} ${key} (-${type}) => ${value}"
   run "/usr/bin/defaults write '${domain}' '${key}' -${type} ${value}"
 }
-
 write_default_global() { write_default "NSGlobalDomain" "$@"; }
 
 host_default() {
@@ -124,32 +143,61 @@ restart_if_running() {
 require_macos
 need_tools
 
+# Preflight backup of all domains we’ll touch (so the folder is never empty)
+for d in \
+  NSGlobalDomain \
+  com.apple.universalaccess \
+  com.apple.dock \
+  com.apple.finder \
+  com.apple.screencapture \
+  com.apple.ActivityMonitor \
+  com.apple.TextEdit \
+  com.apple.Music \
+  com.apple.ImageCapture \
+  com.apple.loginwindow
+do
+  backup_domain "$d"
+done
+
 # ---------- UI responsiveness ----------
 log "Applying low-latency UI settings…"
 
-write_default_global ApplePressAndHoldEnabled bool false     # Disable press-and-hold → faster key repeat
-write_default_global KeyRepeat int 1                         # Fastest key repeat
-write_default_global InitialKeyRepeat int 15                 # Shorter delay before repeat starts
+# Key repeat: faster typing; disables press-and-hold popups
+write_default_global ApplePressAndHoldEnabled bool false
+write_default_global KeyRepeat int 1
+write_default_global InitialKeyRepeat int 15
 
-write_default_global NSAutomaticWindowAnimationsEnabled bool false  # Disable window open/close animations
-write_default_global NSWindowResizeTime float 0.001                 # Near-instant window resizing
-write_default_global NSScrollAnimationEnabled bool false            # Disable smooth scroll animation
-write_default_global NSToolbarTitleViewRolloverDelay float 0        # No toolbar hover delay
-write_default_global WebKitScrollAnimationsEnabled bool false       # Disable scroll animations in WebKit apps
+# Window/scroll animations: reduce UI latency and compositor work
+write_default_global NSAutomaticWindowAnimationsEnabled bool false
+write_default_global NSWindowResizeTime float 0.001
+write_default_global NSScrollAnimationEnabled bool false
+write_default_global NSToolbarTitleViewRolloverDelay float 0
+write_default_global WebKitScrollAnimationsEnabled bool false
 
-write_default -g NSScrollViewRubberbanding bool false                # Disable rubberband "bounce" scrolling
-write_default -g QLPanelAnimationDuration float 0                    # Instant Quick Look opening
+# Rubberband & Quick Look: instant reactions
+write_default_global NSScrollViewRubberbanding bool false
+write_default_global QLPanelAnimationDuration float 0
 
-run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceTransparency -bool true"  # Less GPU work
-run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceMotion -bool true"        # Less motion effects
-run "${SUDO} /usr/bin/defaults write com.apple.universalaccess showWindowTitlebarIcons -bool true"  # Icons in titlebars
+# Accessibility toggles to reduce GPU/compositor load
+run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceTransparency -bool true"
+run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceMotion -bool true"
+run "${SUDO} /usr/bin/defaults write com.apple.universalaccess showWindowTitlebarIcons -bool true"
 
 # ---------- Dock & Mission Control ----------
 log "Tuning Dock & Mission Control…"
 
-write_default com.apple.dock autohide bool true
-write_default com.apple.dock autohide-delay float 0
-write_default com.apple.dock autohide-time-modifier float 0
+# Keep Dock visible by default; enable -H to auto-hide
+if [[ "$DOCK_HIDE" == "1" ]]; then
+  write_default com.apple.dock autohide bool true
+  write_default com.apple.dock autohide-delay float 0
+  write_default com.apple.dock autohide-time-modifier float 0
+else
+  write_default com.apple.dock autohide bool false
+  write_default com.apple.dock autohide-delay float 0
+  write_default com.apple.dock autohide-time-modifier float 0
+fi
+
+# Snappier Dock behavior and Mission Control
 write_default com.apple.dock launchanim bool false
 write_default com.apple.dock mineffect string scale
 write_default com.apple.dock expose-animation-duration float 0
@@ -157,7 +205,7 @@ write_default com.apple.dock show-recents bool false
 write_default com.apple.dock mru-spaces bool true
 write_default com.apple.dock tilesize int 44
 write_default com.apple.dock orientation string bottom
-write_default com.apple.dock static-only bool true
+write_default com.apple.dock static-only bool true  # Only running apps in Dock (toggle to false if you prefer)
 
 # ---------- Finder ----------
 log "Optimizing Finder…"
@@ -190,7 +238,7 @@ write_default com.apple.ActivityMonitor IconType int 5
 write_default com.apple.ActivityMonitor UpdatePeriod int 2
 write_default com.apple.TextEdit RichText bool false
 write_default com.apple.Music userWantsPlaybackNotifications bool false
-host_default com.apple.ImageCapture disableHotPlug bool true
+host_default com.apple.ImageCapture disableHotPlug bool true   # Prevent Photos from auto-opening on device plug
 
 # ---------- Spotlight ----------
 log "Adjusting Spotlight indexing…"
@@ -224,12 +272,14 @@ if [[ "$SKIP_UPDATES" != "1" ]]; then
   run "softwareupdate -ia --verbose || true"
 fi
 
+# Rebuild Launch Services DB (fix slow 'Open With' and app discovery)
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [[ -x "$LSREGISTER" ]]; then
   log "Rebuilding Launch Services database…"
   run "'$LSREGISTER' -kill -r -domain local -domain system -domain user"
 fi
 
+# Rotate logs using Apple's periodic scripts (safer than rm -rf)
 log "Rotating logs (periodic daily/weekly/monthly)…"
 run "${SUDO} periodic daily weekly monthly || true"
 
