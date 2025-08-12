@@ -77,7 +77,7 @@ if [[ -n "$BREW_PREFIX" && -d "$BREW_PREFIX/share/zsh-completions" ]]; then
 fi
 
 autoload -Uz compinit
-# -C skip function check (speed); -i ignore insecure dirs; -d specify dump file
+# -C skip function check (speed); -d specify dump file
 compinit -C -d "$ZSH_COMPDUMP"
 
 # Styles: menu selection, case-insensitive + separator‑smart matching, colors
@@ -382,8 +382,7 @@ _chpwd_project_hook() {
   local hook="./.shellrc" trust="./.shellrc.trust"
   [[ -f "$hook" && -f "$trust" ]] || return 0
   # ensure ownership and permissions
-  [[ -O "$hook" && ! -w /dev/stdout ]] >/dev/null 2>&1
-  if [[ $(stat -f '%Su' "$hook") == "$USER" ]] && [[ $(stat -f '%Mp%Lp' "$hook") != *2 ]]; then
+  if [[ $(stat -f '%Su' "$hook") == "$USER" ]] && (( $(stat -f %Op "$hook") & 0022 == 0 )); then
     source "$hook"
   fi
 }
