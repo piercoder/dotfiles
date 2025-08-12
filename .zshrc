@@ -24,11 +24,12 @@ ZSH_COMPDUMP="$ZDOTDIR/.zcompdump-$ZSH_VERSION"
 #############################################
 setopt AUTO_CD EXTENDED_GLOB GLOB_DOTS NO_NOMATCH CORRECT INTERACTIVE_COMMENTS NOTIFY
 setopt SHARE_HISTORY HIST_IGNORE_ALL_DUPS HIST_REDUCE_BLANKS HIST_VERIFY INC_APPEND_HISTORY
+setopt EXTENDED_HISTORY
 
 HISTFILE="$ZDOTDIR/.zsh_history"
 HISTSIZE=300000
 SAVEHIST=300000
-export HISTTIMEFORMAT="[%F %T] "
+
 
 export LANG="en_US.UTF-8" LC_ALL="en_US.UTF-8"
 export EDITOR="nano"; export VISUAL="$EDITOR"; export PAGER="less -R"
@@ -69,14 +70,14 @@ export PATH MANPATH
 #############################################
 # 3) COMPLETION: cached, fuzzy, pretty
 #############################################
-autoload -Uz compinit
-# -C skip function check (speed); -i ignore insecure dirs; -d specify dump file
-compinit -C -i -d "$ZSH_COMPDUMP"
-
 # Brew completions
 if [[ -n "$BREW_PREFIX" && -d "$BREW_PREFIX/share/zsh-completions" ]]; then
   fpath=("$BREW_PREFIX/share/zsh-completions" $fpath)
 fi
+
+autoload -Uz compinit
+# -C skip function check (speed); -i ignore insecure dirs; -d specify dump file
+compinit -C -i -d "$ZSH_COMPDUMP"
 
 # Styles: menu selection, case-insensitive + separator‑smart matching, colors
 zstyle ':completion:*' menu select
@@ -116,34 +117,8 @@ _git_status_async() {
 _git_status_read() {
   local f; f=("$ZDOTDIR"/.git_async.*(Nom[1]))
   [[ -n "$f" ]] && __GIT_ASYNC="$(<"$f")"
-}
-
-precmd_functions+=(_git_status_async _git_status_read)# --- Async-ish Git: compute branch/status in background so prompt never blocks ---
-# Use floats for time math to avoid "number truncated after 19 digits" warnings.
-typeset -g __GIT_ASYNC __GIT_ASYNC_PTS
-__GIT_ASYNC=""
-__GIT_ASYNC_PTS=0.0
-
-_git_status_async() {
-  local -F now=$EPOCHREALTIME
-  (( now - __GIT_ASYNC_PTS < 0.5 )) && return   # throttle to once per 0.5s
-  __GIT_ASYNC_PTS=$now
-  {
-    local dir branch dirty
-    dir=$(git rev-parse --git-dir 2>/dev/null) || { print -r -- "" >| "$ZDOTDIR/.git_async.$$"; exit 0; }
-    branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
-    git diff --quiet --ignore-submodules HEAD 2>/dev/null; local changed=$?
-    git diff --cached --quiet --ignore-submodules 2>/dev/null; local staged=$?
-    dirty=""
-    (( staged )) && dirty+="*"
-    (( changed )) && dirty+="+"
-    print -r -- "(${branch}${dirty})" >| "$ZDOTDIR/.git_async.$$"
-  } &!
-}
-
-_git_status_read() {
-  local f; f=("$ZDOTDIR"/.git_async.*(Nom[1]))
-  [[ -n "$f" ]] && __GIT_ASYNC="$(<"$f")"
+  # cleanup vecchi tmp (tieni solo l'ultimo)
+  rm -f "$ZDOTDIR"/.git_async.*(N^om[1])
 }
 
 precmd_functions+=(_git_status_async _git_status_read)
@@ -191,7 +166,6 @@ alias cp='cp -i'; alias mv='mv -i'; alias rm='rm -i'
 alias ..='cd ..'; alias ...='cd ../..'; alias ~='cd ~'
 alias grep='grep --color=auto'; alias df='df -h'; alias du='du -h'
 alias o='open'; alias c='clear'
-alias reload='source ~/.zshrc'
 # Git
 alias gs='git status -sb'; alias ga='git add'
 alias gc='git commit -v';  alias gcm='git commit -m'
@@ -203,6 +177,7 @@ alias sudo='sudo '
 # 7) FUNCTIONS: daily work helpers
 #############################################
 take() { mkdir -p -- "$1" && cd -- "$1"; }
+reload() { source ~/.zshrc; }
 clast() { fc -ln -1 | pbcopy; }
 serve() {
   local port="${1:-8000}"
@@ -294,6 +269,24 @@ gitup() {
     git push -u origin "$branch"
   fi
 }
+cdf() {
+  local d; d=$(osascript -e '
+    tell app "Finder"
+      if (count of windows) > 0 then
+        POSIX path of (target of front window as alias)
+      else
+        POSIX path of (path to home folder as text)
+      end if
+    end tell' 2>/dev/null) || return
+  cd -- "$d"
+}
+reveal() {
+  local target="${1:-.}"
+  open -R -- "${target:A}"
+}
+cpath() { printf %s "$PWD${1:+/$1}" | pbcopy; echo "Copied: $(pbpaste)"; }
+odl() { local f=~/Downloads/*(Nom[-1]); [[ -n $f ]] && open -R "$f" || echo "No recent download"; }
+
 #############################################
 # 8) TOOLCHAINS: version managers (auto-detect)
 #############################################
@@ -358,7 +351,7 @@ fi
 # 11) TMUX: auto-attach on login shells (optional)
 #############################################
 if command -v tmux >/dev/null 2>&1; then
-  if [[ -z "$TMUX" && "$-:" == *i* && -o login ]]; then
+  if [[ -z "$TMUX" && -o interactive && -o login ]]; then
     tmux attach -t main 2>/dev/null || tmux new -s main
   fi
 fi
@@ -411,3 +404,8 @@ if [[ $EUID -eq 0 ]]; then
   PROMPT='%F{red}%n%f@%F{magenta}%m%f %F{yellow}%~%f %F{red}${__GIT_ASYNC}%f %# '
   RPROMPT='%F{red}⚠ ROOT ⚠%f'
 fi
+
+#############################################
+# 17) infomac: macOS info script
+#############################################
+[[ -x ~/dotfiles/infomac ]] && ~/dotfiles/infomac
