@@ -77,7 +77,7 @@ fi
 
 autoload -Uz compinit
 # -C skip function check (speed); -i ignore insecure dirs; -d specify dump file
-compinit -C -i -d "$ZSH_COMPDUMP"
+compinit -C -d "$ZSH_COMPDUMP"
 
 # Styles: menu selection, case-insensitive + separator‑smart matching, colors
 zstyle ':completion:*' menu select
@@ -142,8 +142,8 @@ bindkey "^[f" forward-word
 autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
 zle -N up-line-or-beginning-search
 zle -N down-line-or-beginning-search
-bindkey "$key[Up]"   up-line-or-beginning-search
-bindkey "$key[Down]" down-line-or-beginning-search
+bindkey "${terminfo[kcuu1]:-$'\e[A'}" up-line-or-beginning-search
+bindkey "${terminfo[kcud1]:-$'\e[B'}" down-line-or-beginning-search
 
 #############################################
 # 6) ALIASES: smart ls, safety, git
@@ -173,6 +173,8 @@ alias gp='git push';       alias gpf='git push --force-with-lease'
 alias gl='git log --oneline --graph --decorate'
 alias gb='git branch -vv'; alias gco='git checkout'; alias gcb='git checkout -b'
 alias sudo='sudo '
+alias brewup='brew update && brew upgrade && brew autoremove && brew cleanup && { brew doctor || true; }'
+
 #############################################
 # 7) FUNCTIONS: daily work helpers
 #############################################
@@ -285,7 +287,15 @@ reveal() {
   open -R -- "${target:A}"
 }
 cpath() { printf %s "$PWD${1:+/$1}" | pbcopy; echo "Copied: $(pbpaste)"; }
-odl() { local f=~/Downloads/*(Nom[-1]); [[ -n $f ]] && open -R "$f" || echo "No recent download"; }
+odl() {
+  setopt localoptions extendedglob null_glob
+  local -a files=( ~/Downloads/*(om) )   # ordina per mtime (old→new)
+  if (( ${#files} )); then
+    open -R -- "${files[-1]}"            # il più recente
+  else
+    print -P -- "%F{magenta}No recent download%f"
+  fi
+}
 
 #############################################
 # 8) TOOLCHAINS: version managers (auto-detect)
