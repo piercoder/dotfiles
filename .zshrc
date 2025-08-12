@@ -31,7 +31,7 @@ SAVEHIST=300000
 export HISTTIMEFORMAT="[%F %T] "
 
 export LANG="en_US.UTF-8" LC_ALL="en_US.UTF-8"
-export EDITOR="nvim"; export VISUAL="$EDITOR"; export PAGER="less -R"
+export EDITOR="nano"; export VISUAL="$EDITOR"; export PAGER="less -R"
 
 # Better less defaults (quit if one screen, preserve screen, raw color)
 export LESS='-R -F -X'
@@ -198,7 +198,7 @@ alias gc='git commit -v';  alias gcm='git commit -m'
 alias gp='git push';       alias gpf='git push --force-with-lease'
 alias gl='git log --oneline --graph --decorate'
 alias gb='git branch -vv'; alias gco='git checkout'; alias gcb='git checkout -b'
-
+alias sudo='sudo '
 #############################################
 # 7) FUNCTIONS: daily work helpers
 #############################################
@@ -215,6 +215,11 @@ extract() {
   esac
 }
 myip() { curl -s https://ifconfig.me || curl -s https://api.ipify.org; echo; }
+please() {
+  local last; last=$(fc -ln -1) || return
+  [[ -z $last ]] && return
+  print -z -- $([[ $last == sudo\ * ]] && echo "$last" || echo "sudo $last")
+}
 gitup() {
   # Ensure we're in a Git repo
   if ! git rev-parse --is-inside-work-tree &>/dev/null; then
