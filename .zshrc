@@ -191,6 +191,7 @@ alias cp='cp -i'; alias mv='mv -i'; alias rm='rm -i'
 alias ..='cd ..'; alias ...='cd ../..'; alias ~='cd ~'
 alias grep='grep --color=auto'; alias df='df -h'; alias du='du -h'
 alias o='open'; alias c='clear'
+alias reload='source ~/.zshrc'
 # Git
 alias gs='git status -sb'; alias ga='git add'
 alias gc='git commit -v';  alias gcm='git commit -m'
