@@ -116,9 +116,8 @@ _git_status_async() {
 }
 
 _git_status_read() {
-  local f; f=("$ZDOTDIR"/.git_async.*(Nom[1]))
+  local f; f=("$ZDOTDIR"/.git_async.*(Nom[-1]))
   [[ -n "$f" ]] && __GIT_ASYNC="$(<"$f")"
-  # cleanup vecchi tmp (tieni solo l'ultimo)
   rm -f "$ZDOTDIR"/.git_async.*(N^om[1])
 }
 
@@ -245,7 +244,7 @@ openports() { sudo lsof -iTCP -sTCP:LISTEN -P -n; }
 please() {
   local last; last=$(fc -ln -1) || return
   [[ -z $last ]] && return
-  print -z -- $([[ $last == sudo\ * ]] && echo "$last" || echo "sudo $last")
+  print -z -- "$([[ $last == sudo\ * ]] && echo "$last" || echo "sudo $last")"
 }
 gitup() {
   # Ensure we're in a Git repo
