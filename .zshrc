@@ -217,19 +217,22 @@ myip() { curl -s https://ifconfig.me || curl -s https://api.ipify.org; echo; }
 gitup() {
   # Check if we're inside a git repo
   if ! git rev-parse --is-inside-work-tree &>/dev/null; then
-    echo "Not in a Git repository"
+    echo "%F{red} Not in a Git repository%f"
     return 1
   fi
 
   local msg="Update: $(date +'%F %T')"
 
-  echo "Staging changes..."
+  echo "%F{yellow} Staging changes...%f"
   git add -A || return 1
 
-  echo "Committing: $msg"
-  git commit -m "$msg" || { echo "⚠ Nothing to commit"; return 1; }
+  echo "%F{blue} Committing:%f %F{cyan}$msg%f"
+  if ! git commit -m "$msg"; then
+    echo "%F{magenta} Nothing to commit%f"
+    return 1
+  fi
 
-  echo "Pushing..."
+  echo "%F{green} Pushing...%f"
   git push
 }
 #############################################
