@@ -25,6 +25,7 @@ ZSH_COMPDUMP="$ZDOTDIR/.zcompdump-$ZSH_VERSION"
 setopt AUTO_CD EXTENDED_GLOB GLOB_DOTS NO_NOMATCH CORRECT INTERACTIVE_COMMENTS NOTIFY
 setopt SHARE_HISTORY HIST_IGNORE_ALL_DUPS HIST_REDUCE_BLANKS HIST_VERIFY INC_APPEND_HISTORY
 setopt EXTENDED_HISTORY
+setopt HIST_SAVE_NO_DUPS HIST_IGNORE_SPACE HIST_EXPIRE_DUPS_FIRST
 
 HISTFILE="$ZDOTDIR/.zsh_history"
 HISTSIZE=300000
@@ -164,7 +165,10 @@ fi
 
 alias cp='cp -i'; alias mv='mv -i'; alias rm='rm -i'
 alias ..='cd ..'; alias ...='cd ../..'; alias ~='cd ~'
-alias grep='grep --color=auto'; alias df='df -h'; alias du='du -h'
+if command -v grep >/dev/null 2>&1 && grep --version 2>/dev/null | grep -q GNU; then
+  alias grep='grep --color=auto'
+fi 
+alias df='df -h'; alias du='du -h'
 alias o='open'; alias c='clear'
 # Git
 alias gs='git status -sb'; alias ga='git add'
@@ -223,7 +227,7 @@ myip() {
   local_ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
 
   # Get public IP (two fallbacks)
-  public_ip=$(curl -s https://ifconfig.me || curl -s https://api.ipify.org)
+  public_ip=$(curl -m 4 -s https://ifconfig.me || curl -m 4 -s https://api.ipify.org)
 
   if [[ -n "$local_ip" ]]; then
     print -P -- "%F{yellow}Local IP:%f   %F{cyan}$local_ip%f"
