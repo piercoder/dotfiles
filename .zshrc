@@ -215,25 +215,32 @@ extract() {
 }
 myip() { curl -s https://ifconfig.me || curl -s https://api.ipify.org; echo; }
 gitup() {
-  # Check if we're inside a git repo
+  # Ensure we're in a Git repo
   if ! git rev-parse --is-inside-work-tree &>/dev/null; then
-    echo "%F{red} Not in a Git repository%f"
+    print -P -- "%F{red}Not in a git repo%f"
     return 1
   fi
 
   local msg="Update: $(date +'%F %T')"
+  local branch
+  branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
 
-  echo "%F{yellow} Staging changes...%f"
+  print -P -- "%F{yellow}Staging changes...%f"
   git add -A || return 1
 
-  echo "%F{blue} Committing:%f %F{cyan}$msg%f"
+  print -P -- "%F{blue}Committing:%f %F{cyan}$msg%f"
   if ! git commit -m "$msg"; then
-    echo "%F{magenta} Nothing to commit%f"
+    print -P -- "%F{magenta}Nothing to commit on%f %F{yellow}$branch%f"
     return 1
   fi
 
-  echo "%F{green} Pushing...%f"
-  git push
+  if git rev-parse --abbrev-ref --symbolic-full-name @{u} &>/dev/null; then
+    print -P -- "%F{green}Pushing to upstream of%f %F{yellow}$branch%f"
+    git push
+  else
+    print -P -- "%F{green}Pushing and setting upstream for%f %F{yellow}$branch%f"
+    git push -u origin "$branch"
+  fi
 }
 #############################################
 # 8) TOOLCHAINS: version managers (auto-detect)
