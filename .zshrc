@@ -202,8 +202,33 @@ alias sudo='sudo '
 #############################################
 # 7) FUNCTIONS: daily work helpers
 #############################################
-mkcd() { mkdir -p "$1" && cd "$1"; }
-serve() { python3 -m http.server "${1:-8000}"; }
+take() { mkdir -p -- "$1" && cd -- "$1"; }
+clast() { fc -ln -1 | pbcopy; }
+serve() {
+  local port="${1:-8000}"
+  local ip local_url="http://localhost:$port" net_url
+
+  # macOS: grab a likely Wi‑Fi IP (fallback from en0 → en1)
+  ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+  [[ -n "$ip" ]] && net_url="http://$ip:$port"
+
+  print -P -- "%F{green}Serving HTTP from%f %F{yellow}$PWD%f"
+  print -P -- "  • Local:   %F{cyan}$local_url%f"
+  [[ -n "$net_url" ]] && print -P -- "  • Network: %F{cyan}$net_url%f %F{240}(copied to clipboard)%f"
+  print -P -- "%F{yellow}Press Ctrl+C to stop the server%f"
+
+  # Open browser + copy URL in background so server can start first
+  {
+    sleep 0.4
+    open "$local_url"
+    if [[ -n "$net_url" ]]; then
+      printf "%s" "$net_url" | pbcopy
+      open -g "$net_url"   # open network URL in background tab
+    fi
+  } &!
+
+  python3 -m http.server "$port"
+}
 extract() {
   [[ -f "$1" ]] || { echo "extract: '$1' is not a file"; return 1; }
   case "$1" in
@@ -214,7 +239,28 @@ extract() {
     *) echo "extract: unknown archive format" ;;
   esac
 }
-myip() { curl -s https://ifconfig.me || curl -s https://api.ipify.org; echo; }
+myip() {
+  local local_ip public_ip
+
+  # Get local IP (tries common Mac network interfaces)
+  local_ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+
+  # Get public IP (two fallbacks)
+  public_ip=$(curl -s https://ifconfig.me || curl -s https://api.ipify.org)
+
+  if [[ -n "$local_ip" ]]; then
+    print -P -- "%F{yellow}Local IP:%f   %F{cyan}$local_ip%f"
+  else
+    print -P -- "%F{yellow}Local IP:%f   %F{red}Not detected%f"
+  fi
+
+  if [[ -n "$public_ip" ]]; then
+    print -P -- "%F{yellow}Public IP:%f  %F{cyan}$public_ip%f"
+  else
+    print -P -- "%F{yellow}Public IP:%f  %F{red}Not detected%f"
+  fi
+}
+openports() { sudo lsof -iTCP -sTCP:LISTEN -P -n; }
 please() {
   local last; last=$(fc -ln -1) || return
   [[ -z $last ]] && return
