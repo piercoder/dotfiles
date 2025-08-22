@@ -20,4 +20,3 @@ cmd - g : open -a "ChatGPT"
 
 # open Visual Studio Code
 cmd - t : open -na "Visual Studio Code"
-
