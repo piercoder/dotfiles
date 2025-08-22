@@ -1,0 +1,23 @@
+###############################################################################
+# skhdrc-macos — skhdrc for macOS
+# Author: Pierpaolo Pattitoni (@piercoder)
+###############################################################################
+
+# open terminal
+cmd - return : /Applications/kitty.app/Contents/MacOS/kitty --single-instance -d ~
+
+# open Finder
+cmd - f : open -a "Finder"
+
+# open Mail.app (Apple Mail)
+cmd - e : open -a "Mail"
+
+# open Safari
+cmd - b : open -a "Safari"
+
+# open ChatGPT in Safari (web version)
+cmd - g : open -a "ChatGPT"
+
+# open Visual Studio Code
+cmd - t : open -na "Visual Studio Code"
+
