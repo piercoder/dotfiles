@@ -10,7 +10,7 @@ cmd - return : /Applications/kitty.app/Contents/MacOS/kitty --single-instance -d
 cmd - f : open -a "Finder"
 
 # open Mail.app (Apple Mail)
-cmd - e : open -a "Mail"
+cmd - m : open -a "Mail"
 
 # open Safari
 cmd - b : open -a "Safari"
@@ -19,7 +19,7 @@ cmd - b : open -a "Safari"
 cmd - g : open -a "ChatGPT"
 
 # open Visual Studio Code
-cmd - t : open -na "Visual Studio Code"
+cmd - e : open -na "Visual Studio Code"
 
 # shutdown
 cmd + shift - q : osascript -e 'tell application "System Events" to shut down'
