@@ -131,7 +131,8 @@ precmd_functions+=(prompt_precmd)
 # Final prompts
 PROMPT='%F{cyan}%n%f@%F{magenta}%m%f %F{yellow}%~%f %F{green}${__GIT_ASYNC}%f
 %F{blue}❯%f '
-RPROMPT='$(prompt_exit_code)%F{240}%*%f'
+RPROMPT='$(prompt_exit_code)%*%f'
+RPROMPT='$(prompt_exit_code)%F{cyan}USER%f %*%f'
 
 #############################################
 # 5) KEYBINDINGS: macOS-friendly nav
@@ -413,8 +414,9 @@ fi
 # 16) ROOT PROMPT WARNING (with Git info)
 #############################################
 if [[ $EUID -eq 0 ]]; then
-  PROMPT='%F{red}%n%f@%F{magenta}%m%f %F{yellow}%~%f %F{red}${__GIT_ASYNC}%f %# '
-  RPROMPT='%F{red}⚠ ROOT ⚠%f'
+  PROMPT='%F{red}%n%f@%F{magenta}%m%f %F{yellow}%~%f %F{red}${__GIT_ASYNC}%f
+%F{red}❯%f '
+  RPROMPT='$(prompt_exit_code)%F{red}ROOT%f %*%f'
 fi
 
 #############################################
