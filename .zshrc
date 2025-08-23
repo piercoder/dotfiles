@@ -124,7 +124,7 @@ _git_status_read() {
 precmd_functions+=(_git_status_async _git_status_read)
 
 # Exit code + time on the right
-prompt_exit_code() { [[ $RETVAL -ne 0 ]] && print -n "%F{red}✖ $RETVAL%f "; }
+prompt_exit_code() { [[ $RETVAL -ne 0 ]] && print -n "%F{red}$RETVAL%f "; }
 prompt_precmd() { RETVAL=$?; }
 precmd_functions+=(prompt_precmd)
 
