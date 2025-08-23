@@ -131,7 +131,6 @@ precmd_functions+=(prompt_precmd)
 # Final prompts
 PROMPT='%F{cyan}%n%f@%F{magenta}%m%f %F{yellow}%~%f %F{green}${__GIT_ASYNC}%f
 %F{blue}❯%f '
-RPROMPT='$(prompt_exit_code)%*%f'
 RPROMPT='$(prompt_exit_code)%F{cyan}USER%f %*%f'
 
 #############################################
