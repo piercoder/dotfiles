@@ -20,3 +20,9 @@ cmd - g : open -a "ChatGPT"
 
 # open Visual Studio Code
 cmd - t : open -na "Visual Studio Code"
+
+# shutdown
+cmd + shift - q : osascript -e 'tell application "System Events" to shut down'
+
+# reboot
+cmd + shift - r : osascript -e 'tell application "System Events" to restart'
