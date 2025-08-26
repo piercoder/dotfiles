@@ -1,0 +1,889 @@
+#!/bin/zsh
+###############################################################################
+# cleanmac — Friendly macOS cleanup script (zsh)
+#
+# Usage:
+#   ./cleanmac [options]
+#     -y | --yes           Assume "yes" to all prompts (non-interactive safe defaults)
+#     -n | --dry-run       Show what would happen, make no changes
+#     -h | --help          Show help and exit
+#
+# Author:
+#   Pierpaolo Pattitoni — https://github.com/piercoder
+#
+# License:
+#   MIT License — See https://opensource.org/licenses/MIT
+###############################################################################
+
+set -e
+set -u
+set -o pipefail
+
+# Ensure predictable glob behavior
+setopt NO_NOMATCH
+setopt EXTENDED_GLOB
+setopt GLOB_DOTS
+
+# Flags
+ASSUME_YES=0
+DRY_RUN=0
+SHOW_HELP=0
+
+# Parse flags (order independent)
+while (( $# )); do
+  case "$1" in
+    -y|--yes)  ASSUME_YES=1 ;;
+    -n|--dry-run) DRY_RUN=1 ;;
+    -h|--help) SHOW_HELP=1 ;;
+    --) shift; break ;;
+    *) SHOW_HELP=1 ;;
+  esac
+  shift || true
+done
+
+if (( SHOW_HELP )); then
+  cat <<'EOF'
+cleanmac — Friendly macOS cleanup script (zsh)
+
+Usage:
+  ./cleanmac [options]
+    -y | --yes           Assume "yes" to all prompts (non-interactive safe defaults)
+    -n | --dry-run       Show what would happen, make no changes
+    -h | --help          Show this help and exit
+EOF
+  exit 0
+fi
+
+# Safety checks
+if ! command -v sw_vers >/dev/null 2>&1; then print -r -- "This is for macOS." >&2; exit 1; fi
+if [[ -z "${ZSH_VERSION:-}" ]]; then print -r -- "Please run with zsh." >&2; exit 1; fi
+
+# Extra safety: refuse to run the whole script as root; sanity-check $HOME
+if [[ $EUID -eq 0 ]]; then print -r -- "Refusing to run as root." >&2; exit 1; fi
+if [[ -z ${HOME:-} || ! -d $HOME || $HOME == "/" ]]; then print -r -- "Unsafe $HOME." >&2; exit 1; fi
+
+# Use a stable locale for tooling/parsing
+export LC_ALL=C
+
+# Colors & UI (respect NO_COLOR)
+if [[ -n "${NO_COLOR:-}" ]]; then
+  bold=""; reset=""; red=""; green=""; yellow=""; blue=""; magenta=""; cyan=""
+elif command -v tput >/dev/null 2>&1; then
+  bold="$(tput bold)"; reset="$(tput sgr0)"
+  red="$(tput setaf 1)"; green="$(tput setaf 2)"; yellow="$(tput setaf 3)"
+  blue="$(tput setaf 4)"; magenta="$(tput setaf 5)"; cyan="$(tput setaf 6)"
+else
+  bold=""; reset=""; red=""; green=""; yellow=""; blue=""; magenta=""; cyan=""
+fi
+say()   { print -r -- "$@"; }
+info()  { say "${blue}ℹ${reset} $@"; }
+ok()    { say "${green}✔${reset} $@"; }
+warn()  { say "${yellow}⚠${reset} $@"; }
+err()   { say "${red}✖${reset} $@"; }
+hr()    { say "${magenta}────────────────────────────────────────────────────────${reset}"; }
+title() { hr; say "${bold}${magenta}$@${reset}"; hr; }
+section(){
+  say "";
+  if (( DRY_RUN )); then
+    title "$@ (DRY-RUN)";
+  else
+    title "$@";
+  fi
+}
+
+# Single-keypress prompt (no Enter). Auto-yes with -y. Auto-no if not a TTY.
+ask() {
+  local prompt="${bold}${cyan}?${reset} $1 [y/N] "
+  if [[ "${ASSUME_YES:-0}" == "1" ]]; then
+    say "${cyan}?${reset} $1 [auto-yes]"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    say "${cyan}?${reset} $1 [non-interactive → No]"
+    return 1
+  fi
+  read -q "REPLY?$prompt" || { echo ""; return 1; }
+  echo ""
+  [[ "$REPLY" == [yY] ]]
+}
+
+# "Do" wrapper that respects --dry-run
+_do() {
+  if (( DRY_RUN )); then
+    say "[dry-run] $@"
+    return 0
+  else
+    "$@"
+  fi
+}
+
+# Dry-run suffix helper
+dry_sfx() { (( DRY_RUN )) && print -r -- " (dry-run)"; }
+
+# Helper to compute freed bytes consistently
+freed_from(){ local before=$1 after=$2; echo $(( DRY_RUN ? before : (before - after) )); }
+
+# When in dry-run, show an estimated reclaim for this section
+maybe_estimate(){ local b=${1:-0}; (( DRY_RUN )) && info "Estimated reclaim: ~$(bytes_human_mb "$b") MiB"; }
+
+# Helpers
+bytes_human_mb() { # bytes -> MiB with 2 decimals
+  local b=${1:-0}
+  /usr/bin/awk -v b="$b" 'BEGIN{ printf("%.2f", b/1024/1024) }'
+}
+bytes_from_du_k() { # convert KiB from `du -sk` to bytes
+  local k=$(print -r -- "${1:-0}" | /usr/bin/awk '{if ($0 ~ /^[0-9]+$/) print $0; else print 0}')
+  echo $(( k * 1024 ))
+}
+size_of_dir_bytes() { # safe: returns 0 if missing
+  local d="$1"; [[ -d "$d" ]] || { echo 0; return; }
+  local k=$(/usr/bin/du -sk "$d" 2>/dev/null | /usr/bin/awk 'NR==1{print $1+0}')
+  echo $(bytes_from_du_k "$k")
+}
+clamp_nonneg() { local v=${1:-0}; (( v < 0 )) && v=0; print -r -- $v; }
+
+# Consistent MiB/GiB df readout
+human_df() {
+  /bin/df -k / | /usr/bin/awk 'NR==2{printf "/: %.2f GiB free (%.2f GiB total)", $4/1024/1024, $2/1024/1024}'
+}
+
+is_mountpoint() {
+  local d="$1"
+  /sbin/mount | /usr/bin/sed -n 's/^.* on \(.*\) (.*/\1/p' | /usr/bin/grep -Fx -- "$d" >/dev/null
+}
+
+# Extra paranoid absolute-path guard list
+refuse_path() {
+  case "$1" in
+    "/"|"/Users"|"/Volumes"|"/System"|"/System/Volumes"|"/System/Volumes/Data"|"$HOME"|"/Library"|"/bin"|"/sbin"|"/usr"|"/etc"|"/private"|"/opt") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+before_free_str="$(human_df)"
+before_free_mib_dev_free=$(/bin/df -k / | /usr/bin/awk 'NR==2{print $4/1024}')
+macos_version=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
+info "macOS ${macos_version}"
+info "Dry-run mode: $([[ $DRY_RUN -eq 1 ]] && echo ON || echo OFF)"
+if (( ASSUME_YES )) || [[ ! -t 0 ]]; then
+  info "Non-interactive: assuming safe defaults."
+fi
+if [[ -n "${EPOCHSECONDS:-}" ]]; then start_time=$EPOCHSECONDS; else start_time=$(date +%s); fi
+TOTAL_FREED=0
+typeset -A FREED_MAP
+EXIT_STATUS=0
+add_freed() { # add_freed "Label" <bytes>
+  local label="$1"; local b=${2:-0}
+  TOTAL_FREED=$(( TOTAL_FREED + b ))
+  FREED_MAP["$label"]=$(( ${FREED_MAP["$label"]:-0} + b ))
+}
+
+# Always show a summary, even on errors/interrupts.
+cleanup_summary() {
+  # Guard against running twice
+  if [[ -n "${_CLEANMAC_SUMMARY_PRINTED:-}" ]]; then return 0; fi
+  _CLEANMAC_SUMMARY_PRINTED=1
+
+  say ""
+  hr
+  say "${bold}Cleanup complete.${reset}"
+  local after_free_str
+  after_free_str="$(human_df 2>/dev/null || echo "N/A")"
+  local elapsed
+  if [[ -n "${EPOCHSECONDS:-}" ]]; then elapsed=$(( EPOCHSECONDS - start_time )); else elapsed=$(( $(date +%s) - start_time )); fi
+  say "Disk before: ${yellow}${before_free_str}${reset}"
+  say "Disk after:  ${green}${after_free_str}${reset}"
+  say "Estimated freed by this run: ${green}~$(bytes_human_mb "$TOTAL_FREED") MiB${reset}"
+  if (( ${#FREED_MAP[@]} > 0 )); then
+    say "Per-section estimate (largest first):"
+    local -a __pairs
+    local k
+    for k in ${(k)FREED_MAP}; do
+      __pairs+="${FREED_MAP[$k]}::${k}"
+    done
+    local p __val __key
+    for p in ${(On)__pairs}; do
+      __val="${p%%::*}"
+      __key="${p##*::}"
+      say "  - ${__key}: ~$(bytes_human_mb "${__val}") MiB"
+    done
+  fi
+  say "Elapsed: ${cyan}${elapsed}s${reset}"
+    # Set exit status: 2 when nothing was actually cleaned (non-dry-run runs)
+  if (( DRY_RUN == 0 )); then
+    if (( TOTAL_FREED == 0 )); then
+      EXIT_STATUS=2
+    else
+      EXIT_STATUS=0
+    fi
+  fi
+  hr
+  say "${bold}Tip:${reset} Using binary units (MiB/GiB). For more space, search in Finder for ${bold}“File Size” > 1 GB${reset} and review large files you don’t need."
+
+}
+trap 'err "Interrupted. Some cleanup may be incomplete."; exit 1' INT
+trap 'cleanup_summary; exit $EXIT_STATUS' EXIT
+
+# Guarded rm (extra paranoia)
+
+safe_rm_rf_children() {
+  local dir="$1"
+  [[ -z "$dir" ]] && return 1
+  [[ ! -d "$dir" ]] && return 0
+  [[ -L "$dir" ]] && return 1           # refuse symlinks
+  [[ "$dir" == "/" ]] && return 1       # refuse root
+  refuse_path "$dir" && return 1        # extra guard
+  if is_mountpoint "$dir"; then         # refuse mount points
+    return 1
+  fi
+  setopt NULL_GLOB
+  if (( DRY_RUN )); then
+    /usr/bin/find "$dir" -mindepth 1 -maxdepth 1 -print 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove /'
+  else
+    /usr/bin/find "$dir" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d '' p; do
+      if [[ -L "$p" ]]; then
+        _do /bin/rm -f -- "$p" 2>/dev/null || true
+      else
+        _do /bin/rm -rf -- "$p" 2>/dev/null || true
+      fi
+    done
+  fi
+  unsetopt NULL_GLOB
+}
+
+
+### Section 1 — User Caches
+section "Section 1 — User Caches"
+info "Location: ~/Library/Caches (safe to remove; apps will rebuild as needed)."
+if ask "Remove contents of your user cache?"; then
+  set +e
+  dir="$HOME/Library/Caches"
+  before_bytes=$(size_of_dir_bytes "$dir")
+  maybe_estimate "$before_bytes"
+  safe_rm_rf_children "$dir"
+  after_bytes=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$dir")
+  freed_bytes=$(freed_from "$before_bytes" "$after_bytes")
+  freed_bytes=$(clamp_nonneg "$freed_bytes")
+  set -e
+  ok "User caches cleared$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+  add_freed "User Caches" "$freed_bytes"
+else
+  warn "Skipped user caches."
+fi
+
+### Section 1b — Per-app Containers Caches (Optional)
+info "Many apps store caches under ~/Library/Containers/*/Data/Library/Caches."
+if ask "Also clear per-app Containers caches?"; then
+  set +e
+  before_bytes=$(
+    /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Caches/*" -type f -print0 2>/dev/null \
+      | /usr/bin/xargs -0 stat -f%z 2>/dev/null | /usr/bin/awk '{s+=$1} END{print s+0}'
+  )
+  maybe_estimate "$before_bytes"
+  if (( DRY_RUN )); then
+    /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Caches/*" -print 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove /'
+  else
+    /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Caches/*" -type f -delete 2>/dev/null || true
+    /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Caches/*" -type d -empty -delete 2>/dev/null || true
+  fi
+  after_bytes=$(
+    /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Caches/*" -type f -print0 2>/dev/null \
+      | /usr/bin/xargs -0 stat -f%z 2>/dev/null | /usr/bin/awk '{s+=$1} END{print s+0}'
+  )
+  freed_bytes=$(freed_from "$before_bytes" "$after_bytes")
+  freed_bytes=$(clamp_nonneg "$freed_bytes")
+  set -e
+  ok "Per-app Containers caches cleared$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+  add_freed "Containers Caches" "$freed_bytes"
+else
+  warn "Skipped per-app Containers caches."
+fi
+
+### Section 2 — Rotate & Prune Logs
+section "Section 2 — Logs"
+info "We’ll remove log files older than 14 days from common user log folders."
+if ask "Prune old logs (>14 days) in ~/Library/Logs and ~/Library/Containers/*/Data/Library/Logs?"; then
+  set +e
+  old_log_bytes=$( {
+      /usr/bin/find "$HOME/Library/Logs" -type f -mtime +14 -print0 2>/dev/null
+      /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Logs/*" -type f -mtime +14 -print0 2>/dev/null
+    } | /usr/bin/xargs -0 stat -f%z 2>/dev/null | /usr/bin/awk '{s+=$1} END{print s+0}' )
+  maybe_estimate "$old_log_bytes"
+  if (( DRY_RUN )); then
+    {
+      /usr/bin/find "$HOME/Library/Logs" -type f -mtime +14 -print 2>/dev/null
+      /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Logs/*" -type f -mtime +14 -print 2>/dev/null
+    } | /usr/bin/sed 's/^/[dry-run] would remove /'
+  else
+    /usr/bin/find "$HOME/Library/Logs" -type f -mtime +14 -delete 2>/dev/null || true
+    /usr/bin/find "$HOME/Library/Containers" -path "*/Data/Library/Logs/*" -type f -mtime +14 -delete 2>/dev/null || true
+  fi
+  set -e
+  ok "Old logs pruned$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "${old_log_bytes:-0}") MiB"
+  add_freed "Logs" "${old_log_bytes:-0}"
+else
+  warn "Skipped log pruning."
+fi
+
+### Section 3 — Homebrew
+section "Section 3 — Homebrew"
+if command -v brew >/dev/null 2>&1; then
+  # Measure brew cache size before actions
+  BREW_CACHE_DIR=$(brew --cache 2>/dev/null || echo "$HOME/Library/Caches/Homebrew")
+  BREW_CACHE_BEFORE=$(size_of_dir_bytes "$BREW_CACHE_DIR")
+  HAS_BREW_AUTOREMOVE=0
+  if brew commands --quiet 2>/dev/null | /usr/bin/grep -qx "autoremove"; then
+    HAS_BREW_AUTOREMOVE=1
+  fi
+  info "We can remove old Homebrew packages, caches, and dangling data."
+  if ask "Show what 'brew cleanup' would remove, then proceed?"; then
+    set +e
+    brew cleanup -s --prune=30 -n || true
+    set -e
+    if ask "Run 'brew cleanup' and then 'brew autoremove'?"; then
+      set +e
+      if (( DRY_RUN )); then
+        say "[dry-run] brew cleanup -s --prune=30"
+      else
+        brew cleanup -s --prune=30
+      fi
+      if (( HAS_BREW_AUTOREMOVE )); then
+        if (( DRY_RUN )); then say "[dry-run] brew autoremove"; else brew autoremove; fi
+      else
+        warn "'brew autoremove' not supported on this Homebrew; skipping."
+      fi
+      set -e
+      ok "Homebrew cleanup complete$(dry_sfx)."
+      # Report reclaimed space from Homebrew cache
+      BREW_CACHE_AFTER=$(size_of_dir_bytes "$BREW_CACHE_DIR")
+      BREW_CACHE_FREED=$(( DRY_RUN ? 0 : (BREW_CACHE_BEFORE - BREW_CACHE_AFTER) ))
+      BREW_CACHE_FREED=$(clamp_nonneg "$BREW_CACHE_FREED")
+      info "Homebrew cache reclaimed ~$(bytes_human_mb "$BREW_CACHE_FREED") MiB"
+      add_freed "Homebrew Cache" "$BREW_CACHE_FREED"
+      if ask "Run a deeper Homebrew cleanup now (--prune=all -s)?"; then
+        set +e
+        if (( DRY_RUN )); then
+          say "[dry-run] brew cleanup -s --prune=all"
+        else
+          brew cleanup -s --prune=all
+        fi
+        if (( HAS_BREW_AUTOREMOVE )); then
+          if (( DRY_RUN )); then say "[dry-run] brew autoremove"; else brew autoremove; fi
+        fi
+        set -e
+        ok "Deeper Homebrew cleanup complete$(dry_sfx)."
+      else
+        warn "Skipped deeper Homebrew cleanup."
+      fi
+      # Optional: prune old prefixes if supported
+      if brew help cleanup 2>/dev/null | /usr/bin/grep -q -- "prune-prefix"; then
+        if ask "Run 'brew cleanup --prune-prefix' as an extra deep clean?"; then
+          if (( DRY_RUN )); then
+            say "[dry-run] brew cleanup --prune-prefix"
+          else
+            brew cleanup --prune-prefix || true
+          fi
+          ok "Homebrew prune-prefix complete$(dry_sfx)."
+          # Update reclaimed-space report after prune-prefix
+          BREW_CACHE_AFTER=$(size_of_dir_bytes "$BREW_CACHE_DIR")
+          BREW_CACHE_FREED=$(( DRY_RUN ? 0 : (BREW_CACHE_BEFORE - BREW_CACHE_AFTER) ))
+          BREW_CACHE_FREED=$(clamp_nonneg "$BREW_CACHE_FREED")
+          info "Homebrew cache reclaimed so far ~$(bytes_human_mb "$BREW_CACHE_FREED") MiB"
+        else
+          warn "Skipped brew --prune-prefix."
+        fi
+      fi
+    else
+      warn "Skipped Homebrew cleanup."
+    fi
+  else
+    warn "Skipped Homebrew preview/cleanup."
+  fi
+else
+  warn "Homebrew not found; skipping."
+fi
+
+### Section 4 — Xcode & Simulator Derived Data
+section "Section 4 — Xcode Derived Data"
+if [[ -d "$HOME/Library/Developer/Xcode/DerivedData" ]] || [[ -d "$HOME/Library/Developer/CoreSimulator/Caches" ]]; then
+  info "Removing DerivedData and Simulator caches is safe (Xcode will rebuild)."
+  if ask "Delete Xcode DerivedData and Simulator caches?"; then
+    set +e
+    xcode_dd_dir="$HOME/Library/Developer/Xcode/DerivedData"
+    sim_cache_dir="$HOME/Library/Developer/CoreSimulator/Caches"
+    if ask "Preview what would be removed from DerivedData and Simulator caches?"; then
+      say "DerivedData:"
+      /bin/ls -1 "$xcode_dd_dir" 2>/dev/null | /usr/bin/sed 's/^/  - /' || true
+      say "Simulator caches:"
+      /bin/ls -1 "$sim_cache_dir" 2>/dev/null | /usr/bin/sed 's/^/  - /' || true
+    fi
+    dd_before=$(size_of_dir_bytes "$xcode_dd_dir")
+    sim_before=$(size_of_dir_bytes "$sim_cache_dir")
+    maybe_estimate "$(( dd_before + sim_before ))"
+    setopt NULL_GLOB
+    if (( DRY_RUN )); then
+      /bin/ls -A "$xcode_dd_dir" 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove DerivedData: /' || true
+      /bin/ls -A "$sim_cache_dir" 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove Simulator cache: /' || true
+    else
+      _do /bin/rm -rf "$xcode_dd_dir/"*(N) 2>/dev/null || true
+      _do /bin/rm -rf "$sim_cache_dir/"*(N) 2>/dev/null || true
+    fi
+    unsetopt NULL_GLOB
+    dd_after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$xcode_dd_dir")
+    sim_after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$sim_cache_dir")
+    freed_dd=$(freed_from "$dd_before" "$dd_after")
+    freed_sim=$(freed_from "$sim_before" "$sim_after")
+    freed_bytes=$(( freed_dd + freed_sim ))
+    freed_bytes=$(clamp_nonneg "$freed_bytes")
+    set -e
+    ok "Xcode/Simulator caches cleared$(dry_sfx)."
+    info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+    add_freed "Xcode/Simulator Caches" "$freed_bytes"
+  else
+    warn "Skipped Xcode cache cleanup."
+  fi
+else
+  warn "No Xcode caches found; skipping."
+fi
+
+# 4a — Optional: Xcode Device Logs
+if [[ -d "$HOME/Library/Developer/Xcode/iOS Device Logs" ]]; then
+  info "Old device logs can be large; deleting is safe."
+  if ask "Delete Xcode iOS Device Logs?"; then
+    set +e
+    devlog_dir="$HOME/Library/Developer/Xcode/iOS Device Logs"
+    before=$(size_of_dir_bytes "$devlog_dir")
+    maybe_estimate "$before"
+    setopt NULL_GLOB
+    if (( DRY_RUN )); then
+      /bin/ls -A "$devlog_dir" 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove device log: /' || true
+    else
+      _do /bin/rm -rf "$devlog_dir/"*(N) 2>/dev/null || true
+    fi
+    unsetopt NULL_GLOB
+    after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$devlog_dir")
+    freed_bytes=$(freed_from "$before" "$after")
+    freed_bytes=$(clamp_nonneg "$freed_bytes")
+    set -e
+    ok "Xcode device logs removed$(dry_sfx)."
+    info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+    add_freed "Xcode Device Logs" "$freed_bytes"
+  else
+    warn "Skipped device logs."
+  fi
+fi
+
+# 4b — Optional: Remove unavailable simulators
+if command -v xcrun >/dev/null 2>&1; then
+  if ask "Delete unavailable iOS Simulator runtimes (xcrun simctl delete unavailable)?"; then
+    set +e
+    if (( DRY_RUN )); then
+      say "[dry-run] xcrun simctl delete unavailable"
+    else
+      /usr/bin/xcrun simctl delete unavailable >/dev/null 2>&1 || true
+    fi
+    set -e
+    ok "Unavailable simulators removed$(dry_sfx)."
+  else
+    warn "Skipped simulator cleanup."
+  fi
+fi
+
+### Section 4c — Xcode Module Cache & Archives (Optional)
+if [[ -d "$HOME/Library/Developer/Xcode/DerivedData/ModuleCache.noindex" ]] && ask "Clear Xcode ModuleCache.noindex?"; then
+  set +e
+  mdir="$HOME/Library/Developer/Xcode/DerivedData/ModuleCache.noindex"
+  before=$(size_of_dir_bytes "$mdir")
+  maybe_estimate "$before"
+  if (( DRY_RUN )); then /bin/ls -A "$mdir" 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove module cache: /'; else _do /bin/rm -rf "$mdir"/*(N) 2>/dev/null || true; fi
+  after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$mdir")
+  freed_bytes=$(freed_from "$before" "$after")
+  freed_bytes=$(clamp_nonneg "$freed_bytes")
+  set -e
+  ok "Xcode Module Cache cleared$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+  add_freed "Xcode Module Cache" "$freed_bytes"
+fi
+
+# Reworked archive pruning (no find -maxdepth), safely prune top-level archive folders
+if [[ -d "$HOME/Library/Developer/Xcode/Archives" ]] && ask "Prune Xcode Archives older than 30 days?"; then
+  set +e
+  archive_root="$HOME/Library/Developer/Xcode/Archives"
+  cutoff=$(( $(date +%s) - 30*24*3600 ))
+
+  # Sum sizes of folders to be removed
+  old_arch_bytes=$(
+    /bin/ls -1d "$archive_root"/* 2>/dev/null | while IFS= read -r d; do
+      [[ -d "$d" ]] || continue
+      mtime=$(/usr/bin/stat -f %m "$d" 2>/dev/null || echo 0)
+      (( mtime < cutoff )) && /usr/bin/du -sk "$d" 2>/dev/null | /usr/bin/awk '{print $1*1024}'
+    done | /usr/bin/awk '{s+=$1} END{print s+0}'
+  )
+  maybe_estimate "$old_arch_bytes"
+
+  if (( DRY_RUN )); then
+    /bin/ls -1d "$archive_root"/* 2>/dev/null | while IFS= read -r d; do
+      [[ -d "$d" ]] || continue
+      mtime=$(/usr/bin/stat -f %m "$d" 2>/dev/null || echo 0)
+      if (( mtime < cutoff )); then
+        echo "[dry-run] would remove archive: $d"
+      fi
+    done
+  else
+    /bin/ls -1d "$archive_root"/* 2>/dev/null | while IFS= read -r d; do
+      [[ -d "$d" ]] || continue
+      mtime=$(/usr/bin/stat -f %m "$d" 2>/dev/null || echo 0)
+      if (( mtime < cutoff )); then
+        _do /bin/rm -rf -- "$d"
+      fi
+    done
+  fi
+  set -e
+  ok "Old Xcode Archives pruned$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "${old_arch_bytes:-0}") MiB"
+  add_freed "Xcode Archives (>30d)" "${old_arch_bytes:-0}"
+fi
+
+### Section 5 — System Caches (Optional, sudo)
+section "Section 5 — System Caches (Optional)"
+info "We can remove items in /Library/Caches. ${bold}This requires admin rights.${reset}"
+info "NOTE: We intentionally avoid /System/Library/Caches to stay safe."
+if ask "Proceed with /Library/Caches cleanup using sudo?"; then
+  if command -v sudo >/dev/null 2>&1; then
+    set +e
+    if ! sudo -v 2>/dev/null; then
+      warn "sudo was cancelled or failed. Skipping system caches."
+    else
+      # Guard against unexpected symlink at /Library/Caches
+      if [[ -L "/Library/Caches" ]]; then
+        warn "/Library/Caches is a symlink; refusing to modify. Skipping system caches."
+      else
+        bytes_before_k=$(sudo /usr/bin/du -sk /Library/Caches 2>/dev/null | /usr/bin/awk 'NR==1{print $1+0}')
+        bytes_before=$(bytes_from_du_k "$bytes_before_k")
+        maybe_estimate "$bytes_before"
+        if (( DRY_RUN )); then
+          /usr/bin/find /Library/Caches -mindepth 1 -maxdepth 1 -print 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove /'
+        else
+          /usr/bin/find /Library/Caches -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d '' p; do
+            _do sudo /bin/rm -rf -- "$p" 2>/dev/null || true
+          done
+        fi
+        bytes_after_k=$(sudo /usr/bin/du -sk /Library/Caches 2>/dev/null | /usr/bin/awk 'NR==1{print $1+0}')
+        bytes_after=$(bytes_from_du_k "$bytes_after_k")
+        freed_bytes=$(freed_from "$bytes_before" "$bytes_after")
+        freed_bytes=$(clamp_nonneg "$freed_bytes")
+        ok "/Library/Caches cleared$(dry_sfx)."
+        info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+        add_freed "System Caches (/Library/Caches)" "$freed_bytes"
+        # Ensure directory exists with sane ownership and permissions
+        if (( ! DRY_RUN )); then
+          _do sudo /bin/mkdir -p /Library/Caches
+          _do sudo /usr/sbin/chown root:wheel /Library/Caches 2>/dev/null || true
+          _do sudo /bin/chmod 755 /Library/Caches 2>/dev/null || true
+        fi
+      fi
+    fi
+    set -e
+  else
+    err "sudo not available. Skipping."
+  fi
+else
+  warn "Skipped system caches."
+fi
+
+### Section 6 — Rebuild Launch Services
+section "Section 6 — Rebuild Launch Services"
+info "Rebuilding Launch Services database can clean up 'Open With' duplicates."
+if ask "Rebuild Launch Services now?"; then
+  set +e
+  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+  if [[ -x "$LSREGISTER" ]]; then
+    if (( DRY_RUN )); then
+      say "[dry-run] $LSREGISTER -kill -r -domain local -domain system -domain user"
+    else
+      "$LSREGISTER" -kill -r -domain local -domain system -domain user >/dev/null 2>&1
+    fi
+    ok "Launch Services database rebuilt$(dry_sfx)."
+  else
+    warn "lsregister tool not found at expected path; skipping."
+  fi
+  set -e
+else
+  warn "Skipped Launch Services rebuild."
+fi
+
+### Section 7 — Empty Trash
+section "Section 7 — Empty Trash"
+info "We’ll empty the current user’s Trash. (Other volumes’ trashes are untouched.)"
+if ask "Empty your Trash now?"; then
+  set +e
+  trash_dir="$HOME/.Trash"
+  before=$(size_of_dir_bytes "$trash_dir")
+  maybe_estimate "$before"
+  if (( DRY_RUN )); then
+    /bin/ls -A "$trash_dir" 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove from Trash: /' || true
+  else
+    /usr/bin/osascript -e 'tell application "Finder" to empty the trash' >/dev/null 2>&1 || true
+    setopt NULL_GLOB
+    _do /bin/rm -rf "$trash_dir"/*(N) 2>/dev/null || true
+    unsetopt NULL_GLOB
+  fi
+  after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$trash_dir")
+  freed_bytes=$(freed_from "$before" "$after")
+  freed_bytes=$(clamp_nonneg "$freed_bytes")
+  set -e
+  ok "Trash emptied$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+  add_freed "User Trash" "$freed_bytes"
+else
+  warn "Skipped emptying Trash."
+fi
+
+# 7a — Optional: Trashes on external volumes (your UID only)
+# Preview external trashes per volume (read-only)
+set +e
+UID_STR_PREVIEW="$(/usr/bin/id -u)"
+/usr/bin/find /Volumes -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null \
+  | while IFS= read -r -d '' vol; do
+      is_mountpoint "$vol" || continue
+      p="$vol/.Trashes/$UID_STR_PREVIEW"
+      if [[ -d "$p" ]]; then
+        say "Preview of $p:"
+        /bin/ls -A "$p" 2>/dev/null | /usr/bin/head -n 20 | /usr/bin/sed 's/^/  - /' || true
+      fi
+    done
+set -e
+if ask "Also clear your Trash on external volumes (/.Trashes/$UID) if present?"; then
+  set +e
+  UID_STR="$(/usr/bin/id -u)"
+  /usr/bin/find /Volumes -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null \
+    | while IFS= read -r -d '' vol; do
+        is_mountpoint "$vol" || continue
+        p="$vol/.Trashes/$UID_STR"
+        if [[ -d "$p" ]]; then
+          before=$(size_of_dir_bytes "$p")
+          maybe_estimate "$before"
+          info "Clearing $p"
+          setopt NULL_GLOB
+          if (( DRY_RUN )); then /bin/ls -A "$p" 2>/dev/null | /usr/bin/sed "s#^#[dry-run] would remove from $p: #"; else _do /bin/rm -rf "$p/"*(N) 2>/dev/null || true; fi
+          unsetopt NULL_GLOB
+          after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$p")
+          freed=$(freed_from "$before" "$after")
+          freed=$(clamp_nonneg "$freed")
+          info "Freed ~$(bytes_human_mb "$freed") MiB from $vol"
+          add_freed "External Volume Trashes" "$freed"
+        fi
+      done
+  set -e
+  ok "External-volume trashes cleared$(dry_sfx) (if any)."
+fi
+
+### Section 8 — iOS backups (be careful!)
+section "Section 8 — iOS Backups (Optional)"
+BACKUP_DIR="$HOME/Library/Application Support/MobileSync/Backup"
+if [[ -d "$BACKUP_DIR" ]]; then
+  info "iOS device backups can be very large. Deleting them is permanent."
+  if ask "List backup folders and optionally delete them?"; then
+    set +e
+    say "Existing backups (sizes):"
+    (cd "$BACKUP_DIR" && /usr/bin/du -sh * 2>/dev/null || true)
+    set -e
+    if ask "Delete ALL iOS backups in this folder now?"; then
+      set +e
+      before=$(size_of_dir_bytes "$BACKUP_DIR")
+      maybe_estimate "$before"
+      setopt NULL_GLOB
+      if (( DRY_RUN )); then /bin/ls -A "$BACKUP_DIR" 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove iOS backup: /'; else _do /bin/rm -rf "$BACKUP_DIR/"*(N) 2>/dev/null || true; fi
+      unsetopt NULL_GLOB
+      after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$BACKUP_DIR")
+      freed_bytes=$(freed_from "$before" "$after")
+      freed_bytes=$(clamp_nonneg "$freed_bytes")
+      set -e
+      ok "iOS backups removed$(dry_sfx)."
+      info "Freed ~$(bytes_human_mb "$freed_bytes") MiB"
+      add_freed "iOS Backups" "$freed_bytes"
+    else
+      warn "Kept iOS backups."
+    fi
+  else
+    warn "Skipped iOS backup check."
+  fi
+else
+  warn "No iOS backups found; skipping."
+fi
+
+### Section 9 — APFS Time Machine Local Snapshots (Optional)
+section "Section 9 — APFS Local Snapshots (Optional)"
+info "Requests APFS to reclaim space by thinning local snapshots. macOS will continue to create new ones as needed."
+if ask "Thin local Time Machine snapshots now (request ~5 GiB reclaim)?"; then
+  if command -v tmutil >/dev/null 2>&1; then
+    set +e
+    if (( DRY_RUN )); then
+      say "[dry-run] sudo /usr/bin/tmutil thinlocalsnapshots / 5000000000 4"
+    else
+      sudo /usr/bin/tmutil thinlocalsnapshots / 5000000000 4 >/dev/null 2>&1 || true
+    fi
+    set -e
+    ok "Requested thinning of local snapshots$(dry_sfx)."
+    info "Note: reclaimed space may show as ‘purgeable’ and can take a while to appear in Finder/‘About This Mac’."
+  else
+    warn "tmutil not found; skipping snapshot thinning."
+  fi
+else
+  warn "Skipped snapshot thinning."
+fi
+
+### Section 10 — Quick Look & Web Caches (Optional)
+section "Section 10 — Quick Look & Web Caches (Optional)"
+# Quick Look caches
+if ask "Clear Quick Look thumbnail caches?"; then
+  set +e
+  section_total=0
+  for q in "$HOME/Library/Caches/com.apple.QuickLook" "$HOME/Library/Caches/com.apple.QuickLook.thumbnailcache"; do
+    [[ -d "$q" ]] || continue
+    before=$(size_of_dir_bytes "$q")
+    maybe_estimate "$before"
+    if (( DRY_RUN )); then
+      /bin/ls -A "$q" 2>/dev/null | /usr/bin/sed "s#^#[dry-run] would remove Quick Look from $q: #"
+    else
+      /usr/bin/find "$q" -mindepth 1 -exec /bin/rm -rf -- {} + 2>/dev/null || true
+    fi
+    after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$q")
+    freed=$(freed_from "$before" "$after")
+    add_freed "Quick Look Cache" "$freed"
+    section_total=$(( section_total + freed ))
+    info "Freed ~$(bytes_human_mb "$freed") MiB from $q"
+  done
+  set -e
+  info "Total freed in Quick Look: ~$(bytes_human_mb "$section_total") MiB"
+  ok "Quick Look caches cleared$(dry_sfx)."
+else
+  warn "Skipped Quick Look caches."
+fi
+
+# Safari/WebKit caches (safe but may sign you out of sites)
+if ask "Clear Safari/WebKit caches (may sign you out of sites)?"; then
+  if ask "Preview Safari/WebKit items to be removed?"; then
+    for s in \
+      "$HOME/Library/Caches/com.apple.Safari" \
+      "$HOME/Library/Caches/com.apple.WebKit.Networking" \
+      "$HOME/Library/Caches/com.apple.WebKit.WebContent"; do
+      [[ -d "$s" ]] || continue
+      say "$s:"
+      /bin/ls -1 "$s" 2>/dev/null | /usr/bin/sed 's/^/  - /' || true
+    done
+  fi
+  set +e
+  section_total=0
+  for s in \
+    "$HOME/Library/Caches/com.apple.Safari" \
+    "$HOME/Library/Caches/com.apple.WebKit.Networking" \
+    "$HOME/Library/Caches/com.apple.WebKit.WebContent"; do
+    [[ -d "$s" ]] || continue
+    before=$(size_of_dir_bytes "$s")
+    maybe_estimate "$before"
+    if (( DRY_RUN )); then
+      /bin/ls -A "$s" 2>/dev/null | /usr/bin/sed "s#^#[dry-run] would remove Safari/WebKit from $s: #"
+    else
+      /usr/bin/find "$s" -mindepth 1 -exec /bin/rm -rf -- {} + 2>/dev/null || true
+    fi
+    after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$s")
+    freed=$(freed_from "$before" "$after")
+    add_freed "Safari/WebKit Caches" "$freed"
+    section_total=$(( section_total + freed ))
+    info "Freed ~$(bytes_human_mb "$freed") MiB from $s"
+  done
+  set -e
+  info "Total freed in Safari/WebKit: ~$(bytes_human_mb "$section_total") MiB"
+  ok "Safari/WebKit caches cleared$(dry_sfx)."
+else
+  warn "Skipped Safari/WebKit caches."
+fi
+
+### Section 11 — Developer & Package Manager Caches (Optional)
+section "Section 11 — Dev & Package Manager Caches (Optional)"
+if ask "Clear common developer caches (npm, yarn, pip, CocoaPods, SwiftPM)?"; then
+  if ask "Preview developer cache items to be removed?"; then
+    for d in \
+      "$HOME/.npm/_cacache" \
+      "$HOME/Library/Caches/Yarn" \
+      "$HOME/Library/Caches/pip" \
+      "$HOME/Library/Caches/CocoaPods" \
+      "$HOME/Library/Caches/org.swift.swiftpm"; do
+      [[ -d "$d" ]] || continue
+      say "$d:"
+      /bin/ls -1 "$d" 2>/dev/null | /usr/bin/sed 's/^/  - /' || true
+    done
+  fi
+  set +e
+  section_total=0
+  for d in \
+    "$HOME/.npm/_cacache" \
+    "$HOME/Library/Caches/Yarn" \
+    "$HOME/Library/Caches/pip" \
+    "$HOME/Library/Caches/CocoaPods" \
+    "$HOME/Library/Caches/org.swift.swiftpm"; do
+    [[ -d "$d" ]] || continue
+    before=$(size_of_dir_bytes "$d")
+    maybe_estimate "$before"
+    if (( DRY_RUN )); then
+      /bin/ls -A "$d" 2>/dev/null | /usr/bin/sed "s#^#[dry-run] would remove dev cache from $d: #"
+    else
+      /usr/bin/find "$d" -mindepth 1 -exec /bin/rm -rf -- {} + 2>/dev/null || true
+    fi
+    after=$([[ $DRY_RUN -eq 1 ]] && echo 0 || size_of_dir_bytes "$d")
+    freed=$(freed_from "$before" "$after")
+    add_freed "Dev Caches" "$freed"
+    section_total=$(( section_total + freed ))
+    info "Freed ~$(bytes_human_mb "$freed") MiB from $d"
+  done
+  set -e
+  info "Total freed in Dev caches: ~$(bytes_human_mb "$section_total") MiB"
+  ok "Developer caches cleared$(dry_sfx)."
+else
+  warn "Skipped developer caches."
+fi
+
+### Section 12 — Docker (Optional)
+section "Section 12 — Docker (Optional)"
+if command -v docker >/dev/null 2>&1; then
+  info "Docker data can be very large. This removes unused images/containers/volumes."
+  if ask "Run 'docker system prune -af --volumes'?"; then
+    if (( DRY_RUN )); then
+      say "[dry-run] docker system prune -af --volumes"
+    else
+      docker system prune -af --volumes || true
+    fi
+    ok "Docker prune complete$(dry_sfx)."
+  else
+    warn "Skipped Docker prune."
+  fi
+else
+  warn "Docker not found; skipping."
+fi
+
+### Section 13 — Diagnostic Reports (Optional)
+section "Section 13 — Diagnostic Reports (Optional)"
+if ask "Prune DiagnosticReports older than 14 days?"; then
+  set +e
+  diagdir="$HOME/Library/Logs/DiagnosticReports"
+  old_diag_bytes=$( /usr/bin/find "$diagdir" -type f -mtime +14 -print0 2>/dev/null | /usr/bin/xargs -0 stat -f%z 2>/dev/null | /usr/bin/awk '{s+=$1} END{print s+0}' )
+  maybe_estimate "$old_diag_bytes"
+  if (( DRY_RUN )); then
+    /usr/bin/find "$diagdir" -type f -mtime +14 -print 2>/dev/null | /usr/bin/sed 's/^/[dry-run] would remove diagnostic report: /'
+  else
+    /usr/bin/find "$diagdir" -type f -mtime +14 -delete 2>/dev/null || true
+  fi
+  set -e
+  ok "Old DiagnosticReports pruned$(dry_sfx)."
+  info "Freed ~$(bytes_human_mb "${old_diag_bytes:-0}") MiB"
+  add_freed "DiagnosticReports" "${old_diag_bytes:-0}"
+else
+  warn "Skipped DiagnosticReports."
+fi
+
+# The summary is printed by the EXIT trap.
+# EOF

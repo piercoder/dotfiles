@@ -109,7 +109,7 @@ host_default() {
 
 restart_if_running() { for app in "$@"; do run "killall '${app}' 2>/dev/null || true"; done }
 
-# FIXED: robust zsh implementation (works with set -u)
+# Robust zsh implementation (works with set -u)
 apply_specs() {
   # $1 is a newline-separated spec string: "domain|key|type|value"
   local -a specs; specs=("${(f)1}")   # split on newlines
@@ -140,7 +140,7 @@ echo " - Aggressive:     $([[ ${AGGRESSIVE:-0} -eq 1 ]] && echo YES || echo NO)"
 echo " - Skip updates:   $([[ ${SKIP_UPDATES:-0} -eq 1 ]] && echo YES || echo NO)"
 echo "======================================="
 
-# --- specs (compact, no duplication) ---
+# --- specs ---
 UI_SPECS=$'
 NSGlobalDomain|ApplePressAndHoldEnabled|bool|false
 NSGlobalDomain|KeyRepeat|int|1
