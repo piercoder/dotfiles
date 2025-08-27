@@ -83,6 +83,8 @@ run()  {
 }
 
 dump_default_current() {
+  # Skip backing up during dry runs to avoid side effects
+  [[ "${DRY_RUN}" == "1" ]] && return 0
   local domain="$1" key="$2"
   { printf "%s %s =>\n" "$domain" "$key";
     /usr/bin/defaults read "$domain" "$key" 2>/dev/null || true; } >> "${BACKUP}"
@@ -95,7 +97,7 @@ require_macos() {
 }
 
 need_tools() {
-  for cmd in defaults killall mdutil diskutil softwareupdate; do
+  for cmd in defaults killall mdutil diskutil softwareupdate qlmanage launchctl; do
     if ! command -v "$cmd" >/dev/null; then echo "Missing required tool: $cmd"; exit 1; fi
   done
 }
@@ -121,6 +123,8 @@ apply_specs() {
   local -a specs; specs=("${(f)1}")
   local line domain key type value rest
   for line in "${specs[@]}"; do
+    # Trim potential CR from CRLF files
+    line="${line%$'\r'}"
     [[ -z "$line" ]] && continue
     # capture fields while preserving spaces in value
     domain="${line%%|*}"                     # before first |
@@ -149,27 +153,30 @@ require_macos
 need_tools
 
 BACKUP="${HOME}/perfmac-backup-$(date +%Y%m%d-%H%M%S).txt"
-run ": > \"${BACKUP}\""
+run "echo '# perfmac preferences backup' > \"${BACKUP}\""
+run "echo \"# Created: $(date)\" >> \"${BACKUP}\""
+run "echo '# To restore: run defaults write <domain> <key> -<type> <value> from the blocks below' >> \"${BACKUP}\""
+run "echo '# Types: -bool true|false, -int N, -float N, -string \"text\"' >> \"${BACKUP}\""
+run "echo >> \"${BACKUP}\""
 
 # Summary banner
 echo "======================================="
 echo " perfmac run summary"
-echo " - Software updates: ON"
+echo " - Software updates: YES"
 echo " - Dry run:        $([[ ${DRY_RUN:-0} -eq 1 ]] && echo YES || echo NO)"
 echo "======================================="
+[[ ${DRY_RUN:-0} -eq 1 ]] && warn "Dry run: No settings will be changed. Some reads may still occur; backup writing is skipped."
 
 # --- specs ---
+# Note: Some UI-related defaults may be ignored on recent macOS; keeping them is harmless:
+#   NSAutomaticWindowAnimationsEnabled, NSWindowResizeTime, NSScrollViewRubberbanding, QLPanelAnimationDuration
 UI_SPECS=$'
 NSGlobalDomain|ApplePressAndHoldEnabled|bool|false
 NSGlobalDomain|KeyRepeat|int|1
 NSGlobalDomain|InitialKeyRepeat|int|15
-NSGlobalDomain|NSAutomaticWindowAnimationsEnabled|bool|false
-NSGlobalDomain|NSWindowResizeTime|float|0.001
 NSGlobalDomain|NSScrollAnimationEnabled|bool|false
 NSGlobalDomain|NSToolbarTitleViewRolloverDelay|float|0
 NSGlobalDomain|WebKitScrollAnimationsEnabled|bool|false
-NSGlobalDomain|NSScrollViewRubberbanding|bool|false
-NSGlobalDomain|QLPanelAnimationDuration|float|0
 '
 
 ACCESSIBILITY_SPECS=$'
@@ -182,7 +189,6 @@ DOCK_SPECS=$'
 com.apple.dock|autohide|bool|false
 com.apple.dock|launchanim|bool|false
 com.apple.dock|mineffect|string|scale
-com.apple.dock|expose-animation-duration|float|0
 com.apple.dock|show-recents|bool|false
 com.apple.dock|mru-spaces|bool|false
 com.apple.dock|tilesize|int|44
@@ -245,11 +251,15 @@ log "Adjusting Spotlight (keep on system drive; disable on externals)…"
 for vol in /Volumes/*; do
   if [[ ! -e "$vol" ]]; then continue; fi
   if [[ -L "$vol" ]]; then continue; fi
+  # Skip system/readonly volumes
+  if [[ "$vol" == /System/Volumes/* ]]; then continue; fi
+  if [[ ! -w "$vol" ]]; then continue; fi
   if diskutil info "$vol" 2>/dev/null | grep -q "External:.*Yes"; then
     warn "Disabling Spotlight on external volume: $vol"
     run "${SUDO} /usr/bin/mdutil -i off '$vol' 2>/dev/null || true"
     run "${SUDO} touch '$vol'/.metadata_never_index || true"
     run "${SUDO} chflags hidden '$vol'/.metadata_never_index || true"
+    warn "To re-enable Spotlight on $vol: remove $vol/.metadata_never_index and run 'sudo mdutil -i on \"$vol\"'"
   fi
 done
 run "${SUDO} /usr/bin/mdutil -i on / >/dev/null 2>&1 || true"
@@ -262,12 +272,14 @@ write_default com.apple.loginwindow LoginwindowLaunchesRelaunchApps bool false
 # --- Maintenance (safe) ---
 log "Running safe maintenance…"
 warn "Installing available software updates (this may take a while)…"
-run "softwareupdate -ia --verbose || true"
+run "${SUDO} softwareupdate -ia --verbose || true"
 
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [[ -x "$LSREGISTER" ]]; then
   log "Rebuilding Launch Services database…"
   run "'$LSREGISTER' -kill -r -domain local -domain system -domain user"
+else
+  warn "Launch Services tool not found at $LSREGISTER (skipping rebuild)"
 fi
 
 warn "Skipping legacy periodic(8) maintenance on modern macOS."
@@ -283,13 +295,17 @@ run "find '${HOME}/Library/Logs' -mindepth 1 -type f -mtime +7 -print -delete 2>
 # quicklook + dock db resets
 run "rm -rf '${HOME}/Library/Caches/com.apple.QuickLook.thumbnailcache' 2>/dev/null || true"
 run "qlmanage -r cache >/dev/null 2>&1 || true"
-run "rm -rf '${HOME}/Library/Preferences/com.apple.dock.db' 2>/dev/null || true"
+run "rm -f '${HOME}/Library/Application Support/Dock/'*.db 2>/dev/null || true"
 
 # --- Apply & restart affected agents ---
 log "Restarting agents to apply changes…"
 run "killall cfprefsd 2>/dev/null || true"
 restart_if_running "Dock" "Finder" "SystemUIServer" "Activity Monitor" "TextEdit" "Music"
-run "launchctl kickstart -k gui/$UID/com.apple.Dock 2>/dev/null || true"
+if launchctl list 2>/dev/null | grep -q "com\.apple\.Dock"; then
+  run "launchctl kickstart -k gui/$UID/com.apple.Dock 2>/dev/null || true"
+else
+  warn "launchctl label com.apple.Dock not present; skipping kickstart"
+fi
 
 echo
 log "Done. Tip: Reboot to fully apply Spotlight/LaunchServices changes."
