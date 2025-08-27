@@ -10,7 +10,8 @@
 # Features:
 #   - Low-latency UI + fast keyboard repeat rates
 #   - Finder & Dock optimizations (Dock always visible)
-#   - Optional aggressive cleanup of caches/logs
+#   - Aggressive cleanup of caches/logs (prunes items older than 7 days)
+#   - Installs available software updates
 #   - Spotlight control (disable on external drives)
 #   - Safe to run multiple times
 #   - Supports dry-run mode
@@ -20,13 +21,10 @@
 #
 # Options:
 #   -d    Dry run: print commands without executing
-#   -a    Aggressive mode: deeper cache/log cleanup
-#   -s    Skip software update checks
 #   -h    Show usage/help
 #
 # Examples:
-#   ./perfmac            # default optimizations
-#   ./perfmac -a -s      # aggressive cleanup, skip updates
+#   ./perfmac            # aggressive optimizations (default)
 #   ./perfmac -d         # dry-run mode
 #
 # Author:
@@ -45,29 +43,22 @@ set -u
 set -o pipefail
 
 DRY_RUN=0
-AGGRESSIVE=0
-SKIP_UPDATES=0
 
 usage() {
   echo "Usage: perfmac [options]"
   echo
   echo "Options:"
   echo "  -d    Dry run: show what would be done, without making changes"
-  echo "  -a    Aggressive mode: deeper cache/log cleanups (caches will rebuild)"
-  echo "  -s    Skip software updates to save time"
   echo "  -h    Show this help"
   echo
   echo "Examples:"
-  echo "  ./perfmac          # run with defaults"
-  echo "  ./perfmac -a -s    # aggressive clean + skip updates"
+  echo "  ./perfmac          # run aggressive optimizations (default)"
   echo "  ./perfmac -d       # dry run (no changes)"
 }
 
-while getopts "dash" opt; do
+while getopts "dh" opt; do
   case "$opt" in
     d) DRY_RUN=1 ;;
-    a) AGGRESSIVE=1 ;;
-    s) SKIP_UPDATES=1 ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
@@ -76,11 +67,26 @@ shift $((OPTIND-1))
 
 # --- utils ---
 readonly GREEN=$'\033[32m'; readonly YELLOW=$'\033[33m'; readonly DIM=$'\033[2m'; readonly RESET=$'\033[0m'
+readonly RED=$'\033[31m'; readonly BOLD=$'\033[1m'
 readonly SUDO="${SUDO:-sudo}"
 
 log()  { printf "%s•%s %s\n" "$GREEN" "$RESET" "$*"; }
 warn() { printf "%s!%s %s\n"  "$YELLOW" "$RESET" "$*"; }
-run()  { if [[ "$DRY_RUN" == "1" ]]; then printf "%sDRY:%s %s\n" "$DIM" "$RESET" "$*"; else eval "$@"; fi }
+run()  {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf "%sDRY:%s %s\n" "$DIM" "$RESET" "$*"
+  else
+    if ! eval "$@"; then
+      warn "Command failed (ignored): $*"
+    fi
+  fi
+}
+
+dump_default_current() {
+  local domain="$1" key="$2"
+  { printf "%s %s =>\n" "$domain" "$key";
+    /usr/bin/defaults read "$domain" "$key" 2>/dev/null || true; } >> "${BACKUP}"
+}
 
 require_macos() {
   if ! command -v sw_vers >/dev/null; then echo "This script targets macOS."; exit 1; fi
@@ -97,14 +103,14 @@ need_tools() {
 write_default() {
   local domain="$1" key="$2" type="$3" value="$4"
   log "defaults write ${domain} ${key} (-${type}) => ${value}"
-  run "/usr/bin/defaults write '${domain}' '${key}' -${type} ${value}"
+  run "/usr/bin/defaults write '${domain}' '${key}' -${type} \"${value}\""
 }
 write_default_global() { write_default "NSGlobalDomain" "$@"; }
 
 host_default() {
   local domain="$1" key="$2" type="$3" value="$4"
   log "defaults -currentHost write ${domain} ${key} (-${type}) => ${value}"
-  run "/usr/bin/defaults -currentHost write '${domain}' '${key}' -${type} ${value}"
+  run "/usr/bin/defaults -currentHost write '${domain}' '${key}' -${type} \"${value}\""
 }
 
 restart_if_running() { for app in "$@"; do run "killall '${app}' 2>/dev/null || true"; done }
@@ -112,17 +118,27 @@ restart_if_running() { for app in "$@"; do run "killall '${app}' 2>/dev/null || 
 # Robust zsh implementation (works with set -u)
 apply_specs() {
   # $1 is a newline-separated spec string: "domain|key|type|value"
-  local -a specs; specs=("${(f)1}")   # split on newlines
-  local line domain key type value _
+  local -a specs; specs=("${(f)1}")
+  local line domain key type value rest
   for line in "${specs[@]}"; do
     [[ -z "$line" ]] && continue
-    IFS='|' read -r domain key type value <<< "$line"
+    # capture fields while preserving spaces in value
+    domain="${line%%|*}"                     # before first |
+    rest="${line#*|}"                        # after first |
+    key="${rest%%|*}"                         # second field
+    rest="${rest#*|}"                        # after second |
+    type="${rest%%|*}"                        # third field
+    value="${rest#*|}"                       # remainder is value (may contain spaces)
     if [[ "$domain" == "HOST" ]]; then
-      IFS='|' read -r _ domain key type value <<< "$line"
+      # when domain is HOST, the actual domain is in key, shift fields
+      domain="$key"; key="$type"; type="${value%%|*}"; value="${value#*|}"
+      dump_default_current "$domain" "$key"
       host_default "$domain" "$key" "$type" "$value"
     elif [[ "$domain" == "NSGlobalDomain" ]]; then
+      dump_default_current "$domain" "$key"
       write_default_global "$key" "$type" "$value"
     else
+      dump_default_current "$domain" "$key"
       write_default "$domain" "$key" "$type" "$value"
     fi
   done
@@ -132,12 +148,14 @@ apply_specs() {
 require_macos
 need_tools
 
+BACKUP="${HOME}/perfmac-backup-$(date +%Y%m%d-%H%M%S).txt"
+run ": > \"${BACKUP}\""
+
 # Summary banner
 echo "======================================="
 echo " perfmac run summary"
+echo " - Software updates: ON"
 echo " - Dry run:        $([[ ${DRY_RUN:-0} -eq 1 ]] && echo YES || echo NO)"
-echo " - Aggressive:     $([[ ${AGGRESSIVE:-0} -eq 1 ]] && echo YES || echo NO)"
-echo " - Skip updates:   $([[ ${SKIP_UPDATES:-0} -eq 1 ]] && echo YES || echo NO)"
 echo "======================================="
 
 # --- specs ---
@@ -166,10 +184,10 @@ com.apple.dock|launchanim|bool|false
 com.apple.dock|mineffect|string|scale
 com.apple.dock|expose-animation-duration|float|0
 com.apple.dock|show-recents|bool|false
-com.apple.dock|mru-spaces|bool|true
+com.apple.dock|mru-spaces|bool|false
 com.apple.dock|tilesize|int|44
 com.apple.dock|orientation|string|bottom
-com.apple.dock|static-only|bool|true
+com.apple.dock|static-only|bool|false
 '
 
 FINDER_SPECS=$'
@@ -186,13 +204,14 @@ com.apple.finder|CreateDesktop|bool|true
 com.apple.finder|FXDefaultSearchScope|string|SCcf
 '
 
-SCREENSHOT_SPECS=$'
+SCREENSHOT_SPECS=$(cat <<EOF
 com.apple.screencapture|disable-shadow|bool|true
 com.apple.screencapture|include-date|bool|true
 com.apple.screencapture|show-thumbnail|bool|false
 com.apple.screencapture|type|string|png
-com.apple.screencapture|location|string|'${HOME}'/Desktop
-'
+com.apple.screencapture|location|string|${HOME}/Desktop
+EOF
+)
 
 APPS_SPECS=$'
 com.apple.ActivityMonitor|IconType|int|5
@@ -207,9 +226,7 @@ log "Applying low-latency UI settings…"
 apply_specs "$UI_SPECS"
 
 log "Reducing compositor overhead (Accessibility)…"
-run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceTransparency -bool true"
-run "${SUDO} /usr/bin/defaults write com.apple.universalaccess reduceMotion -bool true"
-run "${SUDO} /usr/bin/defaults write com.apple.universalaccess showWindowTitlebarIcons -bool true"
+apply_specs "$ACCESSIBILITY_SPECS"
 
 log "Tuning Dock (visible)…"
 apply_specs "$DOCK_SPECS"
@@ -231,9 +248,11 @@ for vol in /Volumes/*; do
   if diskutil info "$vol" 2>/dev/null | grep -q "External:.*Yes"; then
     warn "Disabling Spotlight on external volume: $vol"
     run "${SUDO} /usr/bin/mdutil -i off '$vol' 2>/dev/null || true"
+    run "${SUDO} touch '$vol'/.metadata_never_index || true"
+    run "${SUDO} chflags hidden '$vol'/.metadata_never_index || true"
   fi
 done
-run "${SUDO} /usr/bin/mdutil -i on / 2>/dev/null || true"
+run "${SUDO} /usr/bin/mdutil -i on / >/dev/null 2>&1 || true"
 
 # --- Login/window restore behavior ---
 log "Disabling app relaunch after login/logout…"
@@ -242,10 +261,8 @@ write_default com.apple.loginwindow LoginwindowLaunchesRelaunchApps bool false
 
 # --- Maintenance (safe) ---
 log "Running safe maintenance…"
-if [[ "$SKIP_UPDATES" != "1" ]]; then
-  warn "Checking for software updates (may take a while)…"
-  run "softwareupdate -ia --verbose || true"
-fi
+warn "Installing available software updates (this may take a while)…"
+run "softwareupdate -ia --verbose || true"
 
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [[ -x "$LSREGISTER" ]]; then
@@ -253,26 +270,28 @@ if [[ -x "$LSREGISTER" ]]; then
   run "'$LSREGISTER' -kill -r -domain local -domain system -domain user"
 fi
 
-log "Rotating logs (periodic daily/weekly/monthly)…"
-run "${SUDO} periodic daily weekly monthly || true"
+warn "Skipping legacy periodic(8) maintenance on modern macOS."
 
-# --- Aggressive mode (optional) ---
-if [[ "$AGGRESSIVE" == "1" ]]; then
-  warn "AGGRESSIVE=1 — deeper cache/log cleanups enabled"
-  run "${SUDO} rm -rf /Library/Caches/* 2>/dev/null || true"
-  run "rm -rf '${HOME}/Library/Caches/'* 2>/dev/null || true"
-  run "${SUDO} rm -rf /Library/Logs/* 2>/dev/null || true"
-  run "rm -rf '${HOME}/Library/Logs/'* 2>/dev/null || true"
-  run "${SUDO} rm -rf /private/var/log/* 2>/dev/null || true"
-  run "rm -rf '${HOME}/Library/Caches/com.apple.QuickLook.thumbnailcache' 2>/dev/null || true"
-  run "qlmanage -r cache 2>/dev/null || true"
-  run "rm -rf '${HOME}/Library/Preferences/com.apple.dock.db' 2>/dev/null || true"
-fi
+warn "Performing deep cache/log cleanup…"
+# prune older than 7 days in system caches/logs
+run "${SUDO} find /Library/Caches -mindepth 1 -mtime +7 -print -delete 2>/dev/null || true"
+run "${SUDO} find /Library/Logs -mindepth 1 -type f -mtime +7 -print -delete 2>/dev/null || true"
+run "${SUDO} find /private/var/log -mindepth 1 -type f -mtime +7 -print -delete 2>/dev/null || true"
+# user caches/logs
+run "find '${HOME}/Library/Caches' -mindepth 1 -mtime +7 -print -delete 2>/dev/null || true"
+run "find '${HOME}/Library/Logs' -mindepth 1 -type f -mtime +7 -print -delete 2>/dev/null || true"
+# quicklook + dock db resets
+run "rm -rf '${HOME}/Library/Caches/com.apple.QuickLook.thumbnailcache' 2>/dev/null || true"
+run "qlmanage -r cache >/dev/null 2>&1 || true"
+run "rm -rf '${HOME}/Library/Preferences/com.apple.dock.db' 2>/dev/null || true"
 
 # --- Apply & restart affected agents ---
 log "Restarting agents to apply changes…"
 run "killall cfprefsd 2>/dev/null || true"
-restart_if_running Dock Finder SystemUIServer Activity\\ Monitor TextEdit Music
+restart_if_running "Dock" "Finder" "SystemUIServer" "Activity Monitor" "TextEdit" "Music"
+run "launchctl kickstart -k gui/$UID/com.apple.Dock 2>/dev/null || true"
 
 echo
 log "Done. Tip: Reboot to fully apply Spotlight/LaunchServices changes."
+log "Preferences backup saved to: ${BACKUP}"
+log "All steps completed."
