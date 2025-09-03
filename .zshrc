@@ -299,6 +299,26 @@ odl() {
     print -P -- "%F{magenta}No recent download%f"
   fi
 }
+bootstrapy() {
+  local PROJECT_NAME="$1"
+  if [[ -z "$PROJECT_NAME" ]]; then
+    print -P -- "%F{red}Error:%f please provide a project name"
+    return 1
+  fi
+
+  mkdir -p "$PROJECT_NAME"
+  cd "$PROJECT_NAME" || return
+
+  echo 'print("Hello, world!")' > main.py
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install --upgrade pip
+  touch requirements.txt
+  print -P -- "%F{green}Project created:%f $PWD"
+  print -P -- "  Virtual env: %F{cyan}$PWD/.venv%f (activated)"
+  print -P -- "  Entry file:  %F{cyan}$PWD/main.py%f"
+  code .
+}
 
 #############################################
 # 8) TOOLCHAINS: version managers (auto-detect)
