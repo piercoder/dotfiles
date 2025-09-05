@@ -22,10 +22,13 @@ alt - g : open -a "ChatGPT"
 alt - e : open -na "Visual Studio Code"
 
 # Show desktop
-alt - d : osascript -e 'tell application "System Events" to set visible of every process whose visible is true to false'
+alt - d : /usr/bin/osascript -e 'tell application "System Events" to set visible of every process whose visible is true to false'
+
+# Full screen
+alt - w : /usr/bin/osascript -e 'tell application "System Events" to delay 0.05' -e 'tell application "System Events" to key code 3 using {control down, command down}'
 
 # Shutdown
-alt + shift - q : osascript -e 'tell application "System Events" to shut down'
+alt + shift - q : /usr/bin/osascript -e 'tell application "System Events" to shut down'
 
 # Restart
-alt + shift - r : osascript -e 'tell application "System Events" to restart'
+alt + shift - r : /usr/bin/osascript -e tell application "System Events" to restart'
