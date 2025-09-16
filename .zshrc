@@ -166,7 +166,7 @@ alias cp='cp -i'; alias mv='mv -i'; alias rm='rm -i'
 alias ..='cd ..'; alias ...='cd ../..'; alias ~='cd ~'
 if command -v grep >/dev/null 2>&1 && grep --version 2>/dev/null | grep -q GNU; then
   alias grep='grep --color=auto'
-fi 
+fi
 alias df='df -h'; alias du='du -h'
 alias o='open'; alias c='clear'
 # Git
@@ -300,24 +300,61 @@ odl() {
   fi
 }
 bootstrapy() {
-  local PROJECT_NAME="$1"
+  setopt localoptions \
+    errexit      \   # like set -e, but local to this function
+    err_return   \   # return from the function on error instead of exiting the shell
+    nounset      \   # like set -u
+    pipe_fail        # like set -o pipefail
+
+  local PROJECT_NAME="${1:-}"
   if [[ -z "$PROJECT_NAME" ]]; then
     print -P -- "%F{red}Error:%f please provide a project name"
     return 1
   fi
 
+  local LIBS=(
+    jupyter ipykernel notebook jupyterlab
+    matplotlib seaborn pandas numpy scipy scikit-learn
+    ipython black flake8 isort mypy
+    requests rich pytest cvxpy yfinance pandas
+  )
+
   mkdir -p "$PROJECT_NAME"
   cd "$PROJECT_NAME" || return
 
-  echo 'print("Hello, world!")' > main.py
-  python3 -m venv .venv
+  [[ -e main.py ]] || echo 'print("Hello, Pier!")' > main.py
+
+  # Choose python3 if present, else python
+  local PY=python3
+  command -v python3 >/dev/null 2>&1 || PY=python
+
+  if [[ ! -d .venv ]]; then
+    "$PY" -m venv .venv
+  fi
   source .venv/bin/activate
-  pip install --upgrade pip
-  touch requirements.txt
+
+  python -m pip install --upgrade pip setuptools wheel
+  python -m pip install "${LIBS[@]}"
+
+  printf "%s\n" "${LIBS[@]}" > requirements.txt
+
+  [[ -e .gitignore ]] || cat > .gitignore <<'EOF'
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+EOF
+
   print -P -- "%F{green}Project created:%f $PWD"
   print -P -- "  Virtual env: %F{cyan}$PWD/.venv%f (activated)"
   print -P -- "  Entry file:  %F{cyan}$PWD/main.py%f"
-  code .
+  print -P -- "  Requirements: %F{cyan}$PWD/requirements.txt%f"
+
+  if command -v code >/dev/null 2>&1; then
+    code .
+  else
+    print -P -- "%F{yellow}Note:%f 'code' CLI not found; open VS Code manually."
+  fi
 }
 
 #############################################
