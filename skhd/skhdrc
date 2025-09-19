@@ -21,9 +21,6 @@ alt - g : open -a "ChatGPT"
 # Open Visual Studio Code
 alt - e : open -na "Visual Studio Code"
 
-# Show desktop (Mission Control)
-alt - d : /usr/bin/osascript -e 'tell application "System Events" to key code 103'
-
 # Full screen
 alt - w : /usr/bin/osascript -e 'tell application "System Events" to delay 0.2' -e 'tell application "System Events" to keystroke "f" using {command down, control down}'
 
